@@ -1,0 +1,9 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# AppleScript compilado: instalar.sh lo genera fuera del repositorio
+*.scpt

@@ -1,0 +1,166 @@
+APILADO TEMPORAL Y GRANO DE PELÍCULA PARA CAPTURE ONE
+=====================================================
+
+Este paquete añade dos herramientas al menú Scripts de Capture One en macOS. La primera, “Apilado temporal”, combina una secuencia hecha con trípode (o a pulso, alineándola antes) mediante un operador temporal (media, mediana, máximo y otros) para conseguir una exposición larga sintética o borrar lo transitorio. La segunda, “Grano de película”, añade a cada imagen seleccionada un grano físicamente escalado según el material elegido (Tri-X, Kodachrome, Velvia, Portra) y el recorte de la foto.
+
+Las dos funcionan igual: exportan las variantes seleccionadas con todos sus ajustes como TIFF de 16 bits en Adobe RGB (1998), las procesan con un programa en Python y vuelven a importar el resultado en el documento abierto.
+
+Qué contiene el paquete
+-----------------------
+
+    Herramientas-Capture-One/
+      README.md                       presentación breve
+      INSTALACION.md                  esta guía
+      INSTALACION.txt                 la misma guía en texto plano
+      LICENSE                         licencia MIT
+      instalar.sh                     instalador automático
+      python/
+        apilado_temporal.py           combina la secuencia en luz lineal, con alineado opcional
+        grano.py                      modelo de grano calibrado con la hoja técnica
+      applescript/
+        apilado_capture_one.applescript
+        grano_capture_one.applescript
+
+Qué hace falta antes de instalar
+--------------------------------
+
+Hace falta macOS con Capture One Pro, porque la orden de procesado por script solo existe en la versión Pro. También hace falta Python 3; los scripts buscan primero el de miniforge en ~/miniforge3/bin/python3 y, si no está, usan el del sistema en /usr/bin/python3. Las librerías necesarias son numpy, tifffile, pillow y opencv-python, y el instalador se encarga de ellas. El compilador de AppleScript, osacompile, viene con macOS y no necesita Xcode.
+
+Instalación automática
+----------------------
+
+Descarga el repositorio desde GitHub (botón “Code”, “Download ZIP”), descomprímelo en Descargas, abre Terminal y ejecuta:
+
+    cd ~/Downloads/Herramientas-Capture-One-main
+    bash instalar.sh
+
+Si tienes git, puedes clonarlo en lugar de descargar el zip:
+
+    git clone https://github.com/falevian/Herramientas-Capture-One.git
+    cd Herramientas-Capture-One
+    bash instalar.sh
+
+El instalador crea las carpetas, copia los programas en Python, instala las librerías, compila los dos scripts en la carpeta de scripts de Capture One y comprueba que todo responde. Si ya tenías un grano.py distinto en ~/Pictures/Grano, lo conserva como grano_anterior.py antes de sustituirlo.
+
+Si quieres usar otro Python, por ejemplo el de un entorno de conda, indícalo así:
+
+    PYTHON=~/miniforge3/envs/Photo/bin/python3 bash instalar.sh
+
+En ese caso cambia también la línea rutaPython de los dos AppleScript para que apunte al mismo Python y vuelve a compilarlos (ver el apartado de instalación paso a paso).
+
+Cuando termine, abre Capture One y usa la opción de actualizar el menú Scripts. Deberían aparecer “Apilado temporal” y “Grano de película”.
+
+Instalación paso a paso
+-----------------------
+
+Si prefieres hacerlo a mano, desde la carpeta descomprimida:
+
+    cd ~/Downloads/Herramientas-Capture-One-main   # o la carpeta clonada con git
+
+    mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Library/Scripts/"Capture One Scripts"
+
+    cp python/apilado_temporal.py ~/Pictures/"Apilado temporal"/
+    cp python/grano.py ~/Pictures/Grano/
+
+    ~/miniforge3/bin/python3 -m pip install numpy tifffile pillow opencv-python
+
+    osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Apilado temporal.scpt" applescript/apilado_capture_one.applescript
+    osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt" applescript/grano_capture_one.applescript
+
+cp y osacompile no escriben nada cuando todo va bien; si no aparece ningún mensaje, ha funcionado.
+
+Cómo comprobar que todo está en su sitio
+----------------------------------------
+
+    ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+    ls -l ~/Library/Scripts/"Capture One Scripts"
+    ~/miniforge3/bin/python3 -c "import numpy, tifffile, PIL, cv2; print('Librerías correctas')"
+
+La primera orden debe mostrar apilado_temporal.py y grano.py, la segunda los dos archivos .scpt con la fecha de hoy y la tercera el mensaje de librerías correctas.
+
+Cómo se usa el apilado temporal
+-------------------------------
+
+Antes de nada, iguala los ajustes de toda la secuencia: ajusta una foto y copia los ajustes a las demás. Después selecciona la secuencia en el navegador, abre el menú Scripts y elige “Apilado temporal”. Aparece una lista de operadores en la que puedes marcar varios a la vez:
+
+1. media: la exposición larga clásica, con obturador rectangular.
+2. hann: media ponderada con ventana de Hann, que suaviza el principio y el final y elimina los lóbulos laterales del sinc.
+3. mediana: borra lo transitorio, como personas, coches o pájaros.
+4. sigma: media que descarta los valores atípicos; borra lo transitorio con menos ruido que la mediana.
+5. maximo: modo aclarar, para estelas de luces y de estrellas.
+6. minimo: modo oscurecer.
+
+Después pregunta si quieres alinear las fotos antes de combinarlas. Con trípode no hace falta. Si el trípode se ha movido o la secuencia es a pulso, elige “Alinear”, indica cómo se han movido las fotos (giro y desplazamiento para un trípode que se ha movido, perspectiva completa para una secuencia a pulso) y la zona estática que se usará para alinear: toda la imagen, la mitad superior o inferior, una franja central o un rectángulo a medida. Deja fuera el agua, las nubes y todo lo que se mueva. Al alinear, el resultado se recorta a la zona que tiene datos en todas las imágenes.
+
+El script exporta las imágenes, espera a que termine la cola, alinea si se lo has pedido, combina en luz lineal, importa los TIFF resultantes y abre en Vista Previa una hoja comparativa con todos los operadores elegidos. Los mensajes del programa (operadores, alineado, recorte) quedan en registro.txt. La mediana y sigma necesitan guardar la pila completa en disco mientras calculan: con cien fotos de 24 megapíxeles son unos 14 GB temporales, que se borran al terminar.
+
+Cómo se usa el grano de película
+--------------------------------
+
+Selecciona una o varias imágenes ya reveladas, abre el menú Scripts y elige “Grano de película”. El script pregunta la película (trix, k64, k25, velvia50, pro400h o generico) y la intensidad, donde 1 corresponde a la granularidad de la hoja técnica.
+
+Cada imagen se exporta, recibe el grano y se importa con el nombre de la película añadido, por ejemplo L1000123_grano_trix.tif. El tamaño del grano se calcula a partir del recorte de cada variante, tomando 36 mm como lado largo del sensor: una foto recortada a la mitad se trata como medio fotograma y el grano se ve proporcionalmente mayor, igual que al ampliar esa parte de un negativo. Si usas otra cámara, cambia la línea ladoSensorMm del AppleScript.
+
+El modelo trabaja por FFT a resolución completa. Con archivos de 60 megapíxeles cada imagen necesita varios gigas de memoria y tarda un rato, así que conviene probar primero con una sola foto. El grano se juzga al 100 %: un visor que reduce la imagen con un filtro pobre convierte el grano fino en manchas.
+
+Dónde quedan los archivos
+-------------------------
+
+Cada ejecución crea su propia carpeta con la fecha y la hora:
+
+    ~/Pictures/Apilado temporal/apilado_AAAAMMDD_HHMMSS/
+        entrada/          TIFF exportados por Capture One
+        resultado/        TIFF combinados, los que se importan
+        comparativa.jpg
+        registro.txt      mensajes del programa (operadores, alineado, recorte)
+
+    ~/Pictures/Grano/grano_AAAAMMDD_HHMMSS/
+        entrada_1/, entrada_2/ ...   TIFF exportados
+        resultado/                   TIFF con grano, los que se importan
+        registro.txt                 parámetros usados en cada imagen
+
+Las carpetas de entrada se pueden borrar cuando hayas comprobado el resultado.
+
+Uso desde Terminal, sin Capture One
+-----------------------------------
+
+Los dos programas funcionan por sí solos con cualquier carpeta de TIFF, JPEG o PNG.
+
+    cd ~/Pictures/"Apilado temporal"
+    ~/miniforge3/bin/python3 apilado_temporal.py carpeta_con_la_secuencia -o resultado --ops media,mediana,maximo,hann --curva 2.2 --comparativa
+
+La opción --curva indica la codificación de las imágenes de entrada: 2.2 para Adobe RGB, 1.8 para ProPhoto, srgb para sRGB. Con --alinear alinea cada foto con la primera (ECC en pirámide, con una estimación inicial por correlación de fase). --modelo-alineado elige la transformación: euclideo (giro y desplazamiento, por defecto) para un trípode que se ha movido, homografia (perspectiva completa) para secuencias a pulso, y también traslacion o afin. Si hay agua o nubes en movimiento, añade --zona-alineado 0,0,1,0.5 (fracciones x0,y0,x1,y1) para que solo use una zona estática. Al alinear se recortan los bordes que quedan sin datos en alguna imagen; --sin-recorte los conserva.
+
+    cd ~/Pictures/Grano
+    ~/miniforge3/bin/python3 grano.py entrada.tif salida.tif --pelicula trix --espacio adobergb
+    ~/miniforge3/bin/python3 grano.py entrada.jpg web.jpg --pelicula k64 --ancho-salida 2000
+
+Con -h cualquiera de los dos muestra todas sus opciones.
+
+Problemas conocidos y cómo resolverlos
+--------------------------------------
+
+La primera vez que se ejecuta cada script, macOS pide permiso para que controle Capture One. Hay que aceptarlo. Si se rechazó por error, se puede activar en Ajustes del Sistema, Privacidad y seguridad, Automatización.
+
+El mensaje “Invalid process output folder” aparece cuando el catálogo no tiene una carpeta de salida válida. Los scripts lo evitan apuntando temporalmente la salida del documento a su propia carpeta y restaurándola al terminar, pero conviene fijar una carpeta de salida real en la herramienta de ubicación de salida del catálogo, porque cualquier otra receta dará el mismo error.
+
+Si la importación falla, los scripts no se interrumpen: abren la carpeta del resultado y muestran lo que respondió Capture One, para importarlo a mano. Ten en cuenta que al importar Capture One aplica la configuración de importación del documento, así que en un catálogo puede copiar los archivos a la ubicación que tengas definida.
+
+Si la cola de procesado está en pausa, los scripts avisan y no hacen nada. Basta con reanudarla.
+
+Si un AppleScript se descarga dos veces, el navegador puede llamarlo por ejemplo grano_capture_one (1).applescript. Para compilar siempre el más reciente:
+
+    osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt" "$(ls -t ~/Downloads/grano_capture_one*.applescript | head -1)"
+
+Cómo actualizar o desinstalar
+-----------------------------
+
+Para actualizar, descarga la versión nueva (o haz git pull en la carpeta clonada) y vuelve a ejecutar bash instalar.sh; sustituye los programas y recompila los scripts.
+
+Para desinstalar:
+
+    rm ~/Library/Scripts/"Capture One Scripts"/"Apilado temporal.scpt"
+    rm ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt"
+    rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+
+La última orden borra también los resultados guardados en esas carpetas, así que conviene revisarlas antes. Las recetas “Apilado temporal TIFF 16” y “Grano TIFF 16” se pueden eliminar desde la herramienta de recetas de Capture One.
