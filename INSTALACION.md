@@ -1,8 +1,16 @@
-# Apilado temporal y grano de película para Capture One
+# Herramientas de fotografía para Capture One
 
-Este paquete añade dos herramientas al menú Scripts de Capture One en macOS. La primera, “Apilado temporal”, combina una secuencia hecha con trípode (o a pulso, alineándola antes) mediante un operador temporal (media, mediana, máximo y otros) para conseguir una exposición larga sintética o borrar lo transitorio. La segunda, “Grano de película”, añade a cada imagen seleccionada un grano físicamente escalado según el material elegido (Tri-X, Kodachrome, Velvia, Pro 400H) y el recorte de la foto.
+Este paquete añade cuatro herramientas al menú Scripts de Capture One en macOS.
 
-Las dos funcionan igual: exportan las variantes seleccionadas con todos sus ajustes como TIFF de 16 bits en Adobe RGB (1998), las procesan con un programa en Python y vuelven a importar el resultado en el documento abierto.
+“Apilado temporal” combina una secuencia mediante un operador temporal (media, mediana, máximo y otros) para conseguir una exposición larga sintética o borrar lo transitorio, con alineado opcional para secuencias a pulso.
+
+“Grano de película” añade a cada imagen un grano físicamente escalado según el material elegido (Tri-X, Kodachrome, Velvia, Pro 400H) y el recorte de la foto.
+
+“Revelado de película” aplica el modelo espectral de peliculas.py evaluado píxel a píxel, con margen para el hombro de la película por encima del blanco difuso, filtros de color simulados espectralmente para el blanco y negro, y grano opcional de la misma película.
+
+“Mapa de zonas” dibuja el sistema de zonas de una imagen, en falso color y como curvas de nivel, para decidir reservados y quemados.
+
+Todas funcionan igual: exportan las variantes seleccionadas como TIFF de 16 bits, las procesan con un programa en Python y vuelven a importar el resultado en el documento abierto (el mapa de zonas, en cambio, se abre en Vista Previa).
 
 Los diálogos salen en español o en inglés. Por defecto siguen el idioma de macOS; el instalador puede fijar uno u otro.
 
@@ -10,17 +18,24 @@ Los diálogos salen en español o en inglés. Por defecto siguen el idioma de ma
 
 ```
 Herramientas-Capture-One/
-  README.md, README.es.md         presentación breve, en inglés y en español
-  INSTALL.md, INSTALL.txt         la guía en inglés
-  INSTALACION.md, INSTALACION.txt esta guía, en Markdown y en texto plano
-  LICENSE                         licencia MIT
-  instalar.sh                     instalador automático
+  README.md, README.es.md           presentación breve, en inglés y en español
+  INSTALL.md, INSTALL.txt           la guía en inglés
+  INSTALACION.md, INSTALACION.txt   esta guía, en Markdown y en texto plano
+  LICENSE                           licencia MIT
+  instalar.sh                       instalador automático
   python/
-    apilado_temporal.py           combina la secuencia en luz lineal, con alineado opcional
-    grano.py                      modelo de grano calibrado con la hoja técnica
+    apilado_temporal.py             combina la secuencia en luz lineal, con alineado opcional
+    grano.py                        modelo de grano calibrado con la hoja técnica
+    revelado/
+      revelado.py                   revelado de película píxel a píxel
+      zonas.py                      mapa del sistema de zonas
+      espacio_color.py              lectura de imágenes y perfiles ICC
+      peliculas.py                  modelos espectrales de las películas
   applescript/
     apilado_capture_one.applescript
     grano_capture_one.applescript
+    revelado_capture_one.applescript
+    zonas_capture_one.applescript
 ```
 
 ## Qué hace falta antes de instalar
@@ -44,7 +59,7 @@ cd Herramientas-Capture-One
 LANGUAGE=es bash instalar.sh
 ```
 
-El instalador crea las carpetas, copia los programas en Python, instala las librerías, compila los dos scripts en la carpeta de scripts de Capture One y comprueba que todo responde. Si ya tenías un `grano.py` distinto en `~/Pictures/Grano`, lo conserva como `grano_anterior.py` antes de sustituirlo.
+El instalador crea las carpetas, copia los programas en Python, instala las librerías, compila los cuatro scripts en la carpeta de scripts de Capture One y comprueba que todo responde. Si ya había una versión distinta de grano.py, revelado.py, zonas.py, espacio_color.py o peliculas.py en su carpeta, la conserva con el sufijo `_anterior` antes de sustituirla.
 
 `LANGUAGE=es` fija los diálogos en español aunque macOS esté en inglés; sin esa variable siguen el idioma del sistema, y con `LANGUAGE=en` salen siempre en inglés. Si quieres usar otro Python, por ejemplo el de un entorno de conda, indícalo así:
 
@@ -54,7 +69,7 @@ PYTHON=~/miniforge3/envs/Photo/bin/python3 LANGUAGE=es bash instalar.sh
 
 El instalador escribe el idioma y el Python elegidos en los scripts compilados, así que no hay que editar nada a mano. Si había una copia de los scripts con los nombres del otro idioma, la elimina para que no aparezcan dos veces en el menú.
 
-Cuando termine, abre Capture One y usa la opción de actualizar el menú Scripts. Deberían aparecer “Apilado temporal” y “Grano de película” (“Temporal stack” y “Film grain” si los diálogos están en inglés).
+Cuando termine, abre Capture One y usa la opción de actualizar el menú Scripts. Deberían aparecer “Apilado temporal”, “Grano de película”, “Revelado de película” y “Mapa de zonas” (“Temporal stack”, “Film grain”, “Film development” y “Zone map” si los diálogos están en inglés).
 
 ## Instalación paso a paso
 
@@ -63,15 +78,18 @@ Si prefieres hacerlo a mano, desde la carpeta descomprimida:
 ```
 cd ~/Downloads/Herramientas-Capture-One-main   # o la carpeta clonada con git
 
-mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Library/Scripts/"Capture One Scripts"
+mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado ~/Library/Scripts/"Capture One Scripts"
 
 cp python/apilado_temporal.py ~/Pictures/"Apilado temporal"/
 cp python/grano.py ~/Pictures/Grano/
+cp python/revelado/*.py ~/Pictures/Revelado/
 
 ~/miniforge3/bin/python3 -m pip install numpy tifffile pillow opencv-python
 
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Apilado temporal.scpt" applescript/apilado_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt" applescript/grano_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Revelado de película.scpt" applescript/revelado_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Mapa de zonas.scpt" applescript/zonas_capture_one.applescript
 ```
 
 `cp` y `osacompile` no escriben nada cuando todo va bien; si no aparece ningún mensaje, ha funcionado. Los scripts compilados así siguen el idioma de macOS y usan el Python por defecto; para fijarlos, cambia las líneas `idiomaFijo` y `pythonFijo` del principio de cada AppleScript antes de compilar (por ejemplo `property idiomaFijo : "es"`).
@@ -79,12 +97,13 @@ osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt" 
 ## Cómo comprobar que todo está en su sitio
 
 ```
-ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ls -l ~/Library/Scripts/"Capture One Scripts"
 ~/miniforge3/bin/python3 -c "import numpy, tifffile, PIL, cv2; print('Librerías correctas')"
+~/miniforge3/bin/python3 ~/Pictures/Revelado/revelado.py --comprobar --pelicula k64
 ```
 
-La primera orden debe mostrar `apilado_temporal.py` y `grano.py`, la segunda los dos archivos `.scpt` con la fecha de hoy y la tercera el mensaje de librerías correctas.
+La primera orden debe mostrar los programas en Python, la segunda los cuatro archivos `.scpt` con la fecha de hoy, la tercera el mensaje de librerías correctas y la cuarta el error de la tabla espectral del revelado, que debe quedar por debajo de 0,1 ΔE.
 
 ## Cómo se usa el apilado temporal
 
@@ -97,17 +116,43 @@ Antes de nada, iguala los ajustes de toda la secuencia: ajusta una foto y copia 
 5. maximo: modo aclarar, para estelas de luces y de estrellas.
 6. minimo: modo oscurecer.
 
-Después pregunta si quieres alinear las fotos antes de combinarlas. Con trípode no hace falta. Si el trípode se ha movido o la secuencia es a pulso, elige “Alinear”, indica cómo se han movido las fotos (giro y desplazamiento para un trípode que se ha movido, perspectiva completa para una secuencia a pulso) y la zona estática que se usará para alinear: toda la imagen, la mitad superior o inferior, una franja central o un rectángulo a medida. Deja fuera el agua, las nubes y todo lo que se mueva. Al alinear, el resultado se recorta a la zona que tiene datos en todas las imágenes.
+Después aparece el interruptor de alineado, con los botones “No alinear” y “Alinear”. Con trípode no hace falta alinear. Si eliges alinear, el script pregunta cómo se han movido las fotos: “Trípode que se ha movido” usa un modelo de giro y desplazamiento, y “A pulso” añade escala y perspectiva completa (homografía). Luego pregunta la zona estática que debe usar para alinear: toda la imagen, la mitad superior, la mitad inferior, una franja central o un rectángulo a medida. Conviene dejar fuera el agua, las nubes y todo lo que se mueva, porque si no el alineado intenta seguir las olas. Al alinear, los bordes que no tienen datos en todas las fotos se recortan, así que el resultado sale algo más pequeño que el original.
 
-El script exporta las imágenes, espera a que termine la cola, alinea si se lo has pedido, combina en luz lineal, importa los TIFF resultantes y abre en Vista Previa una hoja comparativa con todos los operadores elegidos. Los mensajes del programa (operadores, alineado, recorte) quedan en `registro.txt`. La mediana y sigma necesitan guardar la pila completa en disco mientras calculan: con cien fotos de 24 megapíxeles son unos 14 GB temporales, que se borran al terminar.
+El script exporta las imágenes en Adobe RGB (1998), espera a que termine la cola, alinea si se lo has pedido, combina en luz lineal, importa los TIFF resultantes y abre en Vista Previa una hoja comparativa con todos los operadores elegidos. Los mensajes del programa (operadores, alineado, recorte) quedan en `registro.txt`. La mediana y sigma necesitan guardar la pila completa en disco mientras calculan: con cien fotos de 24 megapíxeles son unos 14 GB temporales, que se borran al terminar.
 
 ## Cómo se usa el grano de película
 
 Selecciona una o varias imágenes ya reveladas, abre el menú Scripts y elige “Grano de película”. El script pregunta la película (trix, k64, k25, velvia50, pro400h o generic) y la intensidad, donde 1 corresponde a la granularidad de la hoja técnica. En los negativos (trix, pro400h), 1 incluye además la ganancia de copiar en papel; si resulta excesivo, entre 0,5 y 0,75 es un buen margen.
 
-Cada imagen se exporta, recibe el grano y se importa con el nombre de la película añadido, por ejemplo `L1000123_grano_trix.tif`. El tamaño del grano se calcula a partir del recorte de cada variante, tomando 36 mm como lado largo del sensor: una foto recortada a la mitad se trata como medio fotograma y el grano se ve proporcionalmente mayor, igual que al ampliar esa parte de un negativo. Si usas otro formato de cámara, cambia la línea `ladoSensorMm` del AppleScript.
+Cada imagen se exporta en Adobe RGB (1998), recibe el grano y se importa con el nombre de la película añadido, por ejemplo `L1000123_grano_trix.tif`. El tamaño del grano se calcula a partir del recorte de cada variante, tomando 36 mm como lado largo del sensor: una foto recortada a la mitad se trata como medio fotograma y el grano se ve proporcionalmente mayor, igual que al ampliar esa parte de un negativo. Si usas otro formato de cámara, cambia la línea `ladoSensorMm` del AppleScript.
 
 El modelo trabaja por FFT a resolución completa. Con archivos de 60 megapíxeles cada imagen necesita varios gigas de memoria y tarda un rato, así que conviene probar primero con una sola foto. El grano se juzga al 100 %: un visor que reduce la imagen con un filtro pobre convierte el grano fino en manchas.
+
+## Cómo se usa el revelado de película
+
+El revelado usa los mismos modelos que los perfiles ICC de peliculas.py, pero los evalúa directamente en cada píxel. La imagen debe llevar en Capture One el perfil de cámara normal, sin perfil de película; si el script detecta un perfil de Kodachrome, Velvia, Tri-X o PRO 400H se detiene, porque la película se aplicaría dos veces. La curva no hace falta tocarla: el script pone la Respuesta lineal mientras exporta y luego la devuelve a como estaba.
+
+Selecciona las imágenes, abre el menú Scripts y elige “Revelado de película”. El script pregunta la película. Con Tri-X pregunta además el virado (neutro, frío, cálido, sepia o selenio) y el filtro de color delante del objetivo; con las diapositivas, dónde se va a mirar el resultado, porque una diapositiva se pensó para proyectarse a oscuras y en un monitor conviene bajar el contraste. Luego pide la exposición del film en pasos (0 es la normal; los valores negativos dan una imagen más densa y saturada) y si quieres añadir el grano de la misma película.
+
+Mientras exporta, el script baja la exposición dos pasos y los devuelve en Python antes del modelo. Así llega al modelo lo que hay hasta dos pasos por encima del blanco difuso, que es donde vive el hombro de la película, y las altas luces se comprimen con suavidad en lugar de recortarse. Un perfil ICC no puede hacer esto, porque su entrada se recorta en el blanco.
+
+Los filtros de color multiplican la sensibilidad espectral de la Tri-X por la transmitancia del filtro y ajustan de nuevo la exposición, compensando el factor de filtro con un gris neutro, como al abrir el diafragma lo que indica el factor. Las transmitancias son aproximaciones a las de los Wratten 8, 15, 21, 25, 29, 11 y 47; los factores que salen (1 paso el amarillo, 2,8 el rojo, 3,9 el rojo intenso) coinciden con los habituales. Desde Terminal se puede usar una transmitancia medida con `--filtro-csv`.
+
+Cada imagen se importa con el nombre de la película añadido, y con `_grano` si se pidió grano. El grano se aplica después del revelado, con la misma película y el tamaño calculado a partir del recorte.
+
+El perfil ICC sigue siendo útil para editar, porque se ve en tiempo real. La forma de trabajar que propongo es editar con el perfil ICC de la película para ver hacia dónde va la imagen, volver al perfil de cámara normal y hacer el revelado final con el script.
+
+## Cómo se usa el mapa de zonas
+
+Selecciona una o varias imágenes, abre el menú Scripts y elige “Mapa de zonas”. Hay tres modos.
+
+“La copia, tal como está revelada” lee la imagen con todos sus ajustes y reparte las zonas a pasos iguales de luminosidad, diez unidades de L* por zona, entre el negro (zona 0) y el blanco (zona X). Con esta convención la zona V cae en L* 50, que corresponde a una reflectancia del 18 %, el gris medio. Es el modo para decidir reservados y quemados.
+
+“La escena, como un fotómetro” es la lectura en luz lineal: un paso por zona y el gris medio en la zona V. El script pone temporalmente la Respuesta lineal y baja tres pasos la exposición para no recortar las zonas altas, y luego lo deja todo como estaba.
+
+“Lo que daría una copia de Tri-X a grado 2” invierte una copia modelada de Tri-X en D-76 positivada en Multigrade IV a grado 2: indica en qué zona de la escena habría que haber expuesto cada tono para obtenerlo en esa copia. Sirve para ver cómo comprime ese sistema las luces y las sombras.
+
+Para cada imagen se abren en Vista Previa dos archivos. El mapa en falso color lleva debajo la leyenda con el porcentaje de superficie en cada zona; la zona V es gris neutro para reconocer el gris medio de un vistazo, y las luces y sombras recortadas se marcan en magenta y azul. El segundo archivo es la imagen en gris con las fronteras entre zonas dibujadas como curvas de nivel, con un color para cada frontera. El texto de las imágenes sale en el idioma de los diálogos.
 
 ## Dónde quedan los archivos
 
@@ -118,34 +163,63 @@ Cada ejecución crea su propia carpeta con la fecha y la hora:
     entrada/          TIFF exportados por Capture One
     resultado/        TIFF combinados, los que se importan
     comparison.jpg    hoja comparativa
-    registro.txt      mensajes del programa (operadores, alineado, recorte)
+    registro.txt      salida del programa, con el recorte aplicado si se alineó
 
 ~/Pictures/Grano/grano_AAAAMMDD_HHMMSS/
     entrada_1/, entrada_2/ ...   TIFF exportados
     resultado/                   TIFF con grano, los que se importan
     registro.txt                 parámetros usados en cada imagen
+
+~/Pictures/Revelado/revelado_AAAAMMDD_HHMMSS/
+    entrada_1/, entrada_2/ ...   TIFF exportados en luz lineal
+    trabajo/                     revelados intermedios, antes del grano
+    resultado/                   TIFF finales, los que se importan
+    registro.txt                 parámetros de revelado y de grano
+
+~/Pictures/Revelado/zonas_AAAAMMDD_HHMMSS/
+    entrada_1/, entrada_2/ ...   TIFF exportados
+    *_zones_map.jpg, *_zones_contours.jpg
+    registro.txt                 porcentaje de cada zona
 ```
 
-Con los diálogos en inglés los nombres son `stack_…`, `grain_…`, `input`, `result` y `log.txt`. Las carpetas de entrada se pueden borrar cuando hayas comprobado el resultado.
+Con los diálogos en inglés los nombres son `stack_…`, `grain_…`, `development_…`, `zones_…`, `input`, `work`, `result` y `log.txt`. Las carpetas de entrada y de trabajo se pueden borrar cuando hayas comprobado el resultado.
 
 ## Uso desde Terminal, sin Capture One
 
-Los dos programas funcionan por sí solos con cualquier carpeta de TIFF, JPEG o PNG.
+Los programas funcionan por sí solos con cualquier TIFF, JPEG o PNG. Con `-h` cualquiera de ellos muestra todas sus opciones. Los mensajes y la ayuda siguen la variable `LANG`, o `--lang es` / `--lang en`. Todas las opciones tienen también su nombre en inglés (`--curve`, `--align`, `--film`, `--intensity`, `--toning`…), que es el que muestra la ayuda en inglés.
 
 ```
 cd ~/Pictures/"Apilado temporal"
 ~/miniforge3/bin/python3 apilado_temporal.py carpeta_con_la_secuencia -o resultado --ops media,mediana,maximo,hann --curva 2.2 --comparativa
+~/miniforge3/bin/python3 apilado_temporal.py secuencia_a_pulso -o resultado --ops mediana,media --alinear --modelo-alineado homografia --zona-alineado 0,0,1,0.6 --comparativa
 ```
 
-La opción `--curva` indica la codificación de las imágenes de entrada: 2.2 para Adobe RGB, 1.8 para ProPhoto, srgb para sRGB. Con `--alinear` alinea cada foto con la primera (ECC en pirámide, con una estimación inicial por correlación de fase). `--modelo-alineado` elige la transformación: `euclideo` (giro y desplazamiento, por defecto) para un trípode que se ha movido, `homografia` (perspectiva completa) para secuencias a pulso, y también `traslacion` o `afin`. Si hay agua o nubes en movimiento, añade `--zona-alineado 0,0,1,0.5` (fracciones x0,y0,x1,y1) para que solo use una zona estática. Al alinear se recortan los bordes que quedan sin datos en alguna imagen; `--sin-recorte` los conserva. Los resultados se llaman `stack_<operador>_n<N>.tif`, con el nombre inglés del operador (`mean`, `median`, `max`…).
+La opción `--curva` indica la codificación de las imágenes de entrada: 2.2 para Adobe RGB, 1.8 para ProPhoto, srgb para sRGB. Con `--alinear` alinea cada foto con la primera (ECC en pirámide, con una estimación inicial por correlación de fase). `--modelo-alineado` elige la transformación: `euclideo` (giro y desplazamiento, por defecto), `traslacion`, `afin` u `homografia` para secuencias a pulso. Si hay agua o nubes en movimiento, añade `--zona-alineado 0,0,1,0.5` (fracciones x0,y0,x1,y1) para que solo use una zona estática. `--sin-recorte` conserva el tamaño original en lugar de recortar los bordes sin datos. Los resultados se llaman `stack_<operador>_n<N>.tif`, con el nombre inglés del operador (`mean`, `median`, `max`…).
 
 ```
 cd ~/Pictures/Grano
-~/miniforge3/bin/python3 grano.py entrada.tif salida.tif --pelicula trix --espacio adobergb
+~/miniforge3/bin/python3 grano.py entrada.tif salida.tif --pelicula trix --espacio auto
 ~/miniforge3/bin/python3 grano.py entrada.jpg web.jpg --pelicula k64 --ancho-salida 2000
 ```
 
-Con `-h` cualquiera de los dos muestra todas sus opciones. Los mensajes y la ayuda siguen la variable `LANG`, o `--lang es` / `--lang en`. Todas las opciones tienen también su nombre en inglés (`--curve`, `--align`, `--film`, `--intensity`…), que es el que muestra la ayuda en inglés.
+En grano.py, `--espacio auto` deduce el espacio de color (sRGB, Adobe RGB o ProPhoto) del perfil incrustado.
+
+```
+cd ~/Pictures/Revelado
+~/miniforge3/bin/python3 revelado.py entrada.tif salida.tif --pelicula k64 --sala tenue
+~/miniforge3/bin/python3 revelado.py entrada.tif salida.tif --pelicula trix --virado selenio --filtro rojo --margen 2
+~/miniforge3/bin/python3 revelado.py --comprobar --pelicula velvia50
+```
+
+En revelado.py la entrada debe estar en luz lineal (Respuesta lineal en Capture One). `--margen` indica cuántos pasos se bajó la exposición al exportar. `--blanco papel` lleva al blanco la base del papel o de la diapositiva en lugar del blanco difuso, como en una copia de verdad. `--exacto` hace la integral espectral completa en cada píxel (lento, para verificar) y `--comprobar` mide el error de la tabla espectral.
+
+```
+~/miniforge3/bin/python3 zonas.py foto.tif
+~/miniforge3/bin/python3 zonas.py foto.tif --modo escena --margen 3 --suavizado 2
+~/miniforge3/bin/python3 zonas.py foto.tif --modo pelicula --referencia pro400h --lado 0
+```
+
+En zonas.py, `--lado` fija el lado largo de las imágenes generadas (3000 píxeles por defecto, 0 para el tamaño original) y `--suavizado` simplifica las curvas de nivel. Las imágenes se llaman `<foto>_zones_map.jpg` y `<foto>_zones_contours.jpg`.
 
 ## Problemas conocidos y cómo resolverlos
 
@@ -157,6 +231,10 @@ Si la importación falla, los scripts no se interrumpen: abren la carpeta del re
 
 Si la cola de procesado está en pausa, los scripts avisan y no hacen nada. Basta con reanudarla.
 
+Si el revelado o el mapa de zonas en modo escena avisan de que no pueden poner la curva Respuesta lineal, es que Capture One usa en tu idioma otro nombre para ella. Ponla a mano antes de lanzar el script, o añade el nombre que veas en la lista `curvasLineales` del AppleScript y vuelve a instalar.
+
+Las recetas de revelado y de zonas exportan en ProPhoto RGB para no recortar colores saturados antes del modelo. Si tu Capture One no tiene ese perfil con ese nombre, usan Adobe RGB (1998); los programas leen el espacio del perfil incrustado, así que funcionan igual.
+
 ## Cómo actualizar o desinstalar
 
 Para actualizar, descarga la versión nueva (o haz `git pull` en la carpeta clonada) y vuelve a ejecutar `LANGUAGE=es bash instalar.sh`; sustituye los programas y recompila los scripts.
@@ -166,7 +244,9 @@ Para desinstalar:
 ```
 rm ~/Library/Scripts/"Capture One Scripts"/"Apilado temporal.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt"
-rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+rm ~/Library/Scripts/"Capture One Scripts"/"Revelado de película.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Mapa de zonas.scpt"
+rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ```
 
-Con los diálogos en inglés, los scripts se llaman “Temporal stack.scpt” y “Film grain.scpt”. La última orden borra también los resultados guardados en esas carpetas, así que conviene revisarlas antes. Las recetas “Apilado temporal TIFF 16” y “Grano TIFF 16” (o “Temporal stack TIFF 16” y “Film grain TIFF 16”) se pueden eliminar desde la herramienta de recetas de Capture One.
+Con los diálogos en inglés, los scripts se llaman “Temporal stack.scpt”, “Film grain.scpt”, “Film development.scpt” y “Zone map.scpt”. La última orden borra también los resultados guardados en esas carpetas, así que conviene revisarlas antes. Las recetas “Apilado temporal TIFF 16”, “Grano TIFF 16”, “Revelado TIFF 16” y “Zonas TIFF 16” (o sus equivalentes en inglés: “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16” y “Zones TIFF 16”) se pueden eliminar desde la herramienta de recetas de Capture One.

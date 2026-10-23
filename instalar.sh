@@ -1,6 +1,8 @@
 #!/bin/bash
-# Installer for the temporal stacking and film grain tools for Capture One.
-# Instalador de las herramientas de apilado temporal y grano para Capture One.
+# Installer for the Capture One tools: temporal stack, film grain, film development
+# and zone map.
+# Instalador de las herramientas para Capture One: apilado temporal, grano de
+# película, revelado de película y mapa de zonas.
 #
 # Usage / Uso:
 #   bash instalar.sh
@@ -35,26 +37,37 @@ fi
 
 APILADO="$HOME/Pictures/Apilado temporal"
 GRANO="$HOME/Pictures/Grano"
+REVELADO="$HOME/Pictures/Revelado"
 SCRIPTS="$HOME/Library/Scripts/Capture One Scripts"
-if [ "$L" = es ]; then
-    NOMBRE_APILADO="Apilado temporal"; NOMBRE_GRANO="Grano de película"
-    OTRO_APILADO="Temporal stack"; OTRO_GRANO="Film grain"
-else
-    NOMBRE_APILADO="Temporal stack"; NOMBRE_GRANO="Film grain"
-    OTRO_APILADO="Apilado temporal"; OTRO_GRANO="Grano de película"
-fi
+
+# AppleScript file, menu name in English, menu name in Spanish
+HERRAMIENTAS=(
+    "apilado|Temporal stack|Apilado temporal"
+    "grano|Film grain|Grano de película"
+    "revelado|Film development|Revelado de película"
+    "zonas|Zone map|Mapa de zonas"
+)
+
+conservar () {
+    # copies $1 into folder $2; if a different file was there, keeps it as *_anterior.py
+    local destino="$2/$(basename "$1")"
+    if [ -f "$destino" ] && ! cmp -s "$1" "$destino"; then
+        cp "$destino" "${destino%.py}_anterior.py"
+        msg "   There was a different $(basename "$1"); saved as $(basename "${destino%.py}")_anterior.py" \
+            "   Había un $(basename "$1") distinto; guardado como $(basename "${destino%.py}")_anterior.py"
+    fi
+    cp "$1" "$2/"
+}
 
 msg "1. Creating folders" "1. Creando carpetas"
-mkdir -p "$APILADO" "$GRANO" "$SCRIPTS"
+mkdir -p "$APILADO" "$GRANO" "$REVELADO" "$SCRIPTS"
 
 msg "2. Copying the Python programs" "2. Copiando los programas en Python"
 cp "$DIR/python/apilado_temporal.py" "$APILADO/"
-if [ -f "$GRANO/grano.py" ] && ! cmp -s "$DIR/python/grano.py" "$GRANO/grano.py"; then
-    cp "$GRANO/grano.py" "$GRANO/grano_anterior.py"
-    msg "   There was a different grano.py; saved as grano_anterior.py" \
-        "   Había un grano.py distinto; guardado como grano_anterior.py"
-fi
-cp "$DIR/python/grano.py" "$GRANO/"
+conservar "$DIR/python/grano.py" "$GRANO"
+for f in revelado.py zonas.py espacio_color.py peliculas.py; do
+    conservar "$DIR/python/revelado/$f" "$REVELADO"
+done
 
 msg "3. Installing libraries in $PY" "3. Instalando librerías en $PY"
 "$PY" -m pip install --quiet numpy tifffile pillow opencv-python
@@ -62,24 +75,24 @@ msg "3. Installing libraries in $PY" "3. Instalando librerías en $PY"
 msg "4. Compiling the Capture One scripts" "4. Compilando los scripts de Capture One"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-for f in apilado grano; do
+for h in "${HERRAMIENTAS[@]}"; do
+    IFS='|' read -r f nombre_en nombre_es <<< "$h"
+    if [ "$L" = es ]; then nombre="$nombre_es"; otro="$nombre_en"; else nombre="$nombre_en"; otro="$nombre_es"; fi
     sed -e "s|^property idiomaFijo : \"\"|property idiomaFijo : \"$IDIOMA\"|" \
         -e "s|^property pythonFijo : \"\"|property pythonFijo : \"$PY\"|" \
         "$DIR/applescript/${f}_capture_one.applescript" > "$TMP/$f.applescript"
-done
-osacompile -o "$SCRIPTS/$NOMBRE_APILADO.scpt" "$TMP/apilado.applescript"
-osacompile -o "$SCRIPTS/$NOMBRE_GRANO.scpt" "$TMP/grano.applescript"
-# The same tools under the names of the other language would appear twice in the menu
-for viejo in "$OTRO_APILADO" "$OTRO_GRANO"; do
-    if [ -f "$SCRIPTS/$viejo.scpt" ]; then
-        rm "$SCRIPTS/$viejo.scpt"
-        msg "   Removed the copy in the other language: $viejo.scpt" \
-            "   Eliminada la copia en el otro idioma: $viejo.scpt"
+    osacompile -o "$SCRIPTS/$nombre.scpt" "$TMP/$f.applescript"
+    # the same tool under its name in the other language would appear twice in the menu
+    if [ -f "$SCRIPTS/$otro.scpt" ]; then
+        rm "$SCRIPTS/$otro.scpt"
+        msg "   Removed the copy in the other language: $otro.scpt" \
+            "   Eliminada la copia en el otro idioma: $otro.scpt"
     fi
 done
 
 msg "5. Check" "5. Comprobación"
 "$PY" -c "import numpy, tifffile, PIL, cv2; print('   OK: numpy, tifffile, pillow, opencv')"
+"$PY" "$REVELADO/revelado.py" --check --film k64 --lang "$L" | sed 's/^/   /'
 ls -1 "$SCRIPTS"
 
 echo

@@ -37,8 +37,9 @@ The model, in four steps:
 
 The noise is added in the density domain, per layer, with partial correlation
 between layers and the chromatic component scaled separately (--chroma), and
-converted back to the input space (--space srgb or adobergb, which sets the
-curve and the luminance weights). 16 bit TIFF files are read and written at 16
+converted back to the input space (--space srgb, adobergb or prophoto, which
+sets the curve and the luminance weights; auto reads it from the embedded
+profile). 16 bit TIFF files are read and written at 16
 bits with tifffile, and the ICC profile of the input is kept in the output.
 Needs numpy and Pillow, and tifffile for TIFF.
 
@@ -117,8 +118,9 @@ TEXTOS = {
         'h_correlacion': 'correlation between layers; 1.0 = monochrome',
         'h_croma': 'gain of the chromatic component of the grain (0 = achromatic grain, '
                    '1 = fully independent layers); 0.45 by default in colour',
-        'h_espacio': 'colour space of the input: srgb or adobergb (curve and luminance weights); '
-                     'the ICC profile is kept in the output',
+        'h_espacio': 'colour space of the input: srgb, adobergb or prophoto (curve and luminance '
+                     'weights), or auto to take it from the embedded profile; the ICC profile is kept '
+                     'in the output',
         'h_semilla': 'seed of the random generator, for repeatable results',
         'h_dmax': 'maximum displayed density (deepest black)',
         'h_lang': 'language of messages and help: en or es (default: from LANG)',
@@ -153,8 +155,9 @@ TEXTOS = {
         'h_correlacion': 'correlacion entre capas; 1.0 = monocroma',
         'h_croma': 'ganancia de la componente cromatica del grano (0 = grano acromatico, '
                    '1 = capas plenamente independientes); por defecto 0.45 en color',
-        'h_espacio': 'espacio de color de la entrada: srgb o adobergb (curva y pesos de luminancia); '
-                     'el perfil ICC se conserva en la salida',
+        'h_espacio': 'espacio de color de la entrada: srgb, adobergb o prophoto (curva y pesos de '
+                     'luminancia), o auto para deducirlo del perfil incrustado; el perfil ICC se '
+                     'conserva en la salida',
         'h_semilla': 'semilla del generador aleatorio, para repetir el resultado',
         'h_dmax': 'densidad maxima mostrada (el negro mas profundo)',
         'h_lang': 'idioma de los mensajes y de la ayuda: en o es (por defecto, segun LANG)',
@@ -308,7 +311,38 @@ ESPACIOS = {
     'adobergb': dict(eotf=lambda v: np.clip(v, 0, 1) ** GAMMA_ADOBE,
                      oetf=lambda v: np.clip(v, 0, 1) ** (1 / GAMMA_ADOBE),
                      wv=np.array([0.2973769, 0.6273491, 0.0752741])),
+    'prophoto': dict(eotf=lambda v: np.clip(v, 0, 1) ** 1.8,
+                     oetf=lambda v: np.clip(v, 0, 1) ** (1 / 1.8),
+                     wv=np.array([0.2880402, 0.7118741, 0.0000857])),
 }
+
+
+def espacio_del_icc(icc):
+    """Deduce el espacio por la descripción del perfil incrustado (desc o mluc)."""
+    import struct
+    if not icc:
+        return None
+    try:
+        n = struct.unpack('>I', icc[128:132])[0]
+        for i in range(n):
+            o = 132 + 12 * i
+            if icc[o:o + 4] == b'desc':
+                off = struct.unpack('>I', icc[o + 4:o + 8])[0]
+                if icc[off:off + 4] == b'desc':
+                    m = struct.unpack('>I', icc[off + 8:off + 12])[0]
+                    texto = icc[off + 12:off + 12 + m].decode('latin1', 'replace')
+                else:
+                    largo, desp = struct.unpack('>II', icc[off + 20:off + 28])
+                    texto = icc[off + desp:off + desp + largo].decode('utf-16-be', 'replace')
+                t = texto.lower()
+                for clave, nombre in (('prophoto', 'prophoto'), ('romm', 'prophoto'),
+                                      ('adobe', 'adobergb'), ('srgb', 'srgb')):
+                    if clave in t:
+                        return nombre
+    except Exception:
+        pass
+    return None
+
 
 ICC_TAG = 34675
 
@@ -491,7 +525,7 @@ def main():
     ap.add_argument('--correlation', '--correlacion', dest='correlacion', type=float, default=None,
                     help=_T['h_correlacion'])
     ap.add_argument('--chroma', '--croma', dest='croma', type=float, default=None, help=_T['h_croma'])
-    ap.add_argument('--space', '--espacio', dest='espacio', choices=list(ESPACIOS), default='srgb',
+    ap.add_argument('--space', '--espacio', dest='espacio', choices=['auto'] + list(ESPACIOS), default='srgb',
                     help=_T['h_espacio'])
     ap.add_argument('--seed', '--semilla', dest='semilla', type=int, default=None, help=_T['h_semilla'])
     ap.add_argument('--dmax-vis', type=float, default=2.6, help=_T['h_dmax'])
@@ -515,8 +549,11 @@ def main():
     mtf50 = a.mtf50 if a.mtf50 is not None else pre['mtf50']
     poli = a.poli if a.poli is not None else pre.get('poli', 0.35)
 
-    esp = ESPACIOS[a.espacio]
     rgb, escala, icc = leer_imagen(a.entrada)
+    espacio = a.espacio
+    if espacio == 'auto':
+        espacio = espacio_del_icc(icc) or 'srgb'
+    esp = ESPACIOS[espacio]
     h, w, _ = rgb.shape
     pitch_um = 1000.0 * a.ancho_mm / max(h, w)
 

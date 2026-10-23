@@ -1,13 +1,15 @@
-# Tools for Capture One
+# Photography tools for Capture One
 
 *[Leer en español](README.es.md)*
 
-Two tools for the Scripts menu of Capture One Pro on macOS:
+Four tools for the Scripts menu of Capture One Pro on macOS:
 
 - **Temporal stack.** Combines a sequence of photos, shot on a tripod or hand-held, with temporal operators computed pixel by pixel in linear light: mean, Hann-weighted mean, median, sigma-clipped mean, maximum and minimum. It gives a synthetic long exposure without a neutral density filter, removes transient things (people, cars, birds) or builds up light trails. If the tripod has moved or the sequence is hand-held, it first aligns the photos (pyramidal ECC registration, euclidean or homography) and crops the borders left without data.
 - **Film grain.** Adds to each selected image a grain physically scaled to the chosen film (Tri-X, Kodachrome 64 and 25, Velvia 50, Pro 400H) and to the crop of the photo: an image cropped to half is treated as an enlarged half frame, and the grain looks proportionally larger. The amplitude is calibrated against the datasheet rms granularity, and the grain depends on tone as it does on slide film or on a print from a negative.
+- **Film development.** Develops the image with the spectral film models of [peliculas.py](https://github.com/falevian/Photographers/tree/main/scripts/peliculas), evaluated pixel by pixel instead of through the 3D table of an ICC profile. The export keeps two stops of headroom above diffuse white, so the shoulder of the film compresses the highlights instead of clipping them. With Tri-X it adds toning and colour filters in front of the lens simulated on the spectral sensitivity, and it can finish with the grain of the same film.
+- **Zone map.** Draws the zone system of an image as a false colour map with the area in each zone, and as contour lines over the grey image, to decide dodging and burning. It reads the print as developed, the scene like a light meter, or the tones a modelled Tri-X print at grade 2 would give.
 
-Both work the same way: they export the selected variants with all their adjustments as 16 bit TIFF in Adobe RGB (1998), process them with a Python program and import the result back into the open document. The dialogs follow the macOS language, English or Spanish.
+All of them export the selected variants as 16 bit TIFF, process them with a Python program and import the result back into the open document (the zone map opens in Preview). The dialogs follow the macOS language, English or Spanish.
 
 ## Requirements
 
@@ -22,42 +24,50 @@ cd Herramientas-Capture-One
 bash instalar.sh
 ```
 
-The installer copies the Python programs to `~/Pictures/Apilado temporal` and `~/Pictures/Grano`, installs the libraries, compiles the two AppleScripts into `~/Library/Scripts/Capture One Scripts` and checks that everything responds. Then, in Capture One, refresh the Scripts menu: “Temporal stack” and “Film grain” should appear. `LANGUAGE=es` or `LANGUAGE=en` in front of the command fixes the language of the dialogs, and `PYTHON=/path/to/python3` selects another Python.
+The installer copies the Python programs to `~/Pictures/Apilado temporal`, `~/Pictures/Grano` and `~/Pictures/Revelado`, installs the libraries, compiles the four AppleScripts into `~/Library/Scripts/Capture One Scripts` and checks that everything responds. Then, in Capture One, refresh the Scripts menu: “Temporal stack”, “Film grain”, “Film development” and “Zone map” should appear. `LANGUAGE=es` or `LANGUAGE=en` in front of the command fixes the language of the dialogs, and `PYTHON=/path/to/python3` selects another Python.
 
 The full guide is in [INSTALL.md](INSTALL.md) (plain text in [INSTALL.txt](INSTALL.txt)): step by step installation, how to use each tool, where the files end up, known problems and how to uninstall.
 
 ## Contents
 
 ```
-instalar.sh                        automatic installer
+instalar.sh                          automatic installer
 python/
-  apilado_temporal.py              stacks the sequence in linear light, optional alignment
-  grano.py                         grain model calibrated with the datasheets
+  apilado_temporal.py                stacks the sequence in linear light, optional alignment
+  grano.py                           grain model calibrated with the datasheets
+  revelado/
+    revelado.py                      film development pixel by pixel
+    zonas.py                         zone system map
+    espacio_color.py                 reading of images and ICC profiles
+    peliculas.py                     spectral models of the films
 applescript/
-  apilado_capture_one.applescript  “Temporal stack” in the Scripts menu
-  grano_capture_one.applescript    “Film grain” in the Scripts menu
-INSTALL.md, INSTALL.txt            full guide
-INSTALACION.md, INSTALACION.txt    full guide in Spanish
+  apilado_capture_one.applescript    “Temporal stack” in the Scripts menu
+  grano_capture_one.applescript      “Film grain”
+  revelado_capture_one.applescript   “Film development”
+  zonas_capture_one.applescript      “Zone map”
+INSTALL.md, INSTALL.txt              full guide
+INSTALACION.md, INSTALACION.txt      full guide in Spanish
 ```
 
 ## Use from Terminal
 
-Both programs work on their own, without Capture One, on any folder of TIFF, JPEG or PNG files:
+The programs work on their own, without Capture One, on any TIFF, JPEG or PNG file:
 
 ```
 python3 apilado_temporal.py sequence -o result --ops mean,median,max,hann --curve 2.2 --comparison
 python3 apilado_temporal.py sequence -o result --ops median --align --align-model homography --align-region 0,0,1,0.5
-python3 grano.py input.tif output.tif --film trix --space adobergb
-python3 grano.py input.jpg web.jpg --film k64 --output-width 2000
+python3 grano.py input.tif output.tif --film trix --space auto
+python3 revelado.py linear.tif output.tif --film trix --toning selenium --filter red --headroom 2
+python3 zonas.py photo.tif --mode scene --headroom 3
 ```
 
-With `-h` either program shows all its options. Messages follow the `LANG` variable or `--lang en|es`, and every option also accepts its Spanish name.
+With `-h` any of them shows all its options. Messages follow the `LANG` variable or `--lang en|es`, and every option also accepts its Spanish name.
 
 ## Background
 
 These tools accompany the site [Fotografía para científicos](https://falevian.github.io/Photographers/) (Photography for scientists), whose source is in [falevian/Photographers](https://github.com/falevian/Photographers). The site is bilingual:
 
-- The grain model is described in [Classic films as ICC profiles](https://falevian.github.io/Photographers/peliculas-icc.html). The version in this repository adds 16 bit TIFF input and output, keeps the ICC profile and has the `--space` option to work in Adobe RGB.
+- The film models and the grain are described in [Classic films as ICC profiles](https://falevian.github.io/Photographers/peliculas-icc.html). peliculas.py is the same file as in that repository; the grano.py here adds 16 bit TIFF input and output, keeps the ICC profile and has the `--space` option (sRGB, Adobe RGB, ProPhoto or auto).
 - The theory of temporal stacking is in the [long exposure tool](https://falevian.github.io/Photographers/exposicion-larga.html) and its [manual](https://falevian.github.io/Photographers/manual-exposicion-larga.html).
 
 ## Licence

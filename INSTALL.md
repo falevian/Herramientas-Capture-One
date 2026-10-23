@@ -1,8 +1,16 @@
-# Temporal stacking and film grain for Capture One
+# Photography tools for Capture One
 
-This package adds two tools to the Scripts menu of Capture One on macOS. The first, “Temporal stack”, combines a sequence shot on a tripod (or hand-held, aligning it first) with a temporal operator (mean, median, maximum and others) to obtain a synthetic long exposure or to remove transient things. The second, “Film grain”, adds to each selected image a physically scaled grain that depends on the chosen film (Tri-X, Kodachrome, Velvia, Pro 400H) and on the crop of the photo.
+This package adds four tools to the Scripts menu of Capture One on macOS.
 
-Both work the same way: they export the selected variants with all their adjustments as 16 bit TIFF in Adobe RGB (1998), process them with a Python program and import the result back into the open document.
+“Temporal stack” combines a sequence with a temporal operator (mean, median, maximum and others) to obtain a synthetic long exposure or to remove transient things, with optional alignment for hand-held sequences.
+
+“Film grain” adds to each image a physically scaled grain that depends on the chosen film (Tri-X, Kodachrome, Velvia, Pro 400H) and on the crop of the photo.
+
+“Film development” applies the spectral model of peliculas.py evaluated pixel by pixel, with headroom for the shoulder of the film above diffuse white, colour filters simulated spectrally for black and white, and optional grain of the same film.
+
+“Zone map” draws the zone system of an image, in false colour and as contour lines, to decide dodging and burning.
+
+All of them work the same way: they export the selected variants as 16 bit TIFF, process them with a Python program and import the result back into the open document (the zone map opens in Preview instead).
 
 The dialogs appear in English or Spanish. By default they follow the language of macOS; the installer can fix one or the other.
 
@@ -10,17 +18,24 @@ The dialogs appear in English or Spanish. By default they follow the language of
 
 ```
 Herramientas-Capture-One/
-  README.md, README.es.md         short presentation, in English and Spanish
-  INSTALL.md, INSTALL.txt         this guide, in Markdown and plain text
-  INSTALACION.md, INSTALACION.txt the same guide in Spanish
-  LICENSE                         MIT licence
-  instalar.sh                     automatic installer
+  README.md, README.es.md           short presentation, in English and Spanish
+  INSTALL.md, INSTALL.txt           this guide, in Markdown and plain text
+  INSTALACION.md, INSTALACION.txt   the same guide in Spanish
+  LICENSE                           MIT licence
+  instalar.sh                       automatic installer
   python/
-    apilado_temporal.py           stacks the sequence in linear light, optional alignment
-    grano.py                      grain model calibrated with the datasheets
+    apilado_temporal.py             stacks the sequence in linear light, optional alignment
+    grano.py                        grain model calibrated with the datasheets
+    revelado/
+      revelado.py                   film development pixel by pixel
+      zonas.py                      zone system map
+      espacio_color.py              reading of images and ICC profiles
+      peliculas.py                  spectral models of the films
   applescript/
     apilado_capture_one.applescript
     grano_capture_one.applescript
+    revelado_capture_one.applescript
+    zonas_capture_one.applescript
 ```
 
 ## What you need before installing
@@ -44,7 +59,7 @@ cd Herramientas-Capture-One
 bash instalar.sh
 ```
 
-The installer creates the folders, copies the Python programs, installs the libraries, compiles the two scripts into the Capture One scripts folder and checks that everything responds. If there was already a different `grano.py` in `~/Pictures/Grano`, it keeps it as `grano_anterior.py` before replacing it.
+The installer creates the folders, copies the Python programs, installs the libraries, compiles the four scripts into the Capture One scripts folder and checks that everything responds. If there was already a different version of grano.py, revelado.py, zonas.py, espacio_color.py or peliculas.py in its folder, it keeps it with the suffix `_anterior` before replacing it.
 
 Two optional variables change the installation:
 
@@ -54,9 +69,9 @@ LANGUAGE=es bash instalar.sh                                 dialogs always in S
 PYTHON=~/miniforge3/envs/Photo/bin/python3 bash instalar.sh  use another Python, for example a conda environment
 ```
 
-The installer writes the chosen language and Python into the compiled scripts, so nothing has to be edited by hand.
+The installer writes the chosen language and Python into the compiled scripts, so nothing has to be edited by hand. If there was a copy of the scripts under their names in the other language, it removes it so that they do not appear twice in the menu.
 
-When it finishes, open Capture One and refresh the Scripts menu. “Temporal stack” and “Film grain” should appear (“Apilado temporal” and “Grano de película” when the dialogs are in Spanish).
+When it finishes, open Capture One and refresh the Scripts menu. “Temporal stack”, “Film grain”, “Film development” and “Zone map” should appear (“Apilado temporal”, “Grano de película”, “Revelado de película” and “Mapa de zonas” when the dialogs are in Spanish).
 
 ## Step by step installation
 
@@ -65,30 +80,34 @@ If you prefer to do it by hand, from the unzipped folder:
 ```
 cd ~/Downloads/Herramientas-Capture-One-main   # or the folder cloned with git
 
-mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Library/Scripts/"Capture One Scripts"
+mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado ~/Library/Scripts/"Capture One Scripts"
 
 cp python/apilado_temporal.py ~/Pictures/"Apilado temporal"/
 cp python/grano.py ~/Pictures/Grano/
+cp python/revelado/*.py ~/Pictures/Revelado/
 
 ~/miniforge3/bin/python3 -m pip install numpy tifffile pillow opencv-python
 
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Temporal stack.scpt" applescript/apilado_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Film grain.scpt" applescript/grano_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Film development.scpt" applescript/revelado_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Zone map.scpt" applescript/zonas_capture_one.applescript
 ```
 
-`cp` and `osacompile` print nothing when everything goes well. Scripts compiled this way follow the language of macOS and use the default Python; to fix them, edit the `idiomaFijo` and `pythonFijo` lines at the top of each AppleScript before compiling.
+`cp` and `osacompile` print nothing when everything goes well. Scripts compiled this way follow the language of macOS and use the default Python; to fix them, edit the `idiomaFijo` and `pythonFijo` lines at the top of each AppleScript before compiling (for example `property idiomaFijo : "en"`).
 
-The folder names `Apilado temporal` and `Grano` are the same in both languages: the scripts look for the Python programs there.
+The folder names `Apilado temporal`, `Grano` and `Revelado` are the same in both languages: the scripts look for the Python programs there.
 
 ## How to check that everything is in place
 
 ```
-ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ls -l ~/Library/Scripts/"Capture One Scripts"
 ~/miniforge3/bin/python3 -c "import numpy, tifffile, PIL, cv2; print('Libraries OK')"
+~/miniforge3/bin/python3 ~/Pictures/Revelado/revelado.py --check --film k64
 ```
 
-The first command must show `apilado_temporal.py` and `grano.py`, the second the two `.scpt` files with today's date and the third the libraries message.
+The first command must show the Python programs, the second the four `.scpt` files with today's date, the third the libraries message and the fourth the error of the spectral table of the development, which must stay below 0.1 ΔE.
 
 ## How to use the temporal stack
 
@@ -101,17 +120,43 @@ First, equalise the adjustments of the whole sequence: adjust one photo and copy
 5. max: lighten mode, for light trails and star trails.
 6. min: darken mode.
 
-Next it asks whether to align the photos before combining them. With a tripod it is not needed. If the tripod has moved or the sequence is hand-held, choose “Align”, say how the photos have moved (rotation and shift for a tripod that has moved, full perspective for a hand-held sequence) and the static region used for the alignment: the whole image, the upper or lower half, a central band or a custom rectangle. Leave out water, clouds and anything that moves. When aligning, the result is cropped to the area that has data in all the images.
+Next comes the alignment switch, with the buttons “Don't align” and “Align”. With a tripod there is no need to align. If you choose to align, the script asks how the photos have moved: “Tripod that has moved” uses a rotation and shift model, and “Hand-held” adds scale and full perspective (homography). Then it asks for the static region to use for the alignment: the whole image, the upper half, the lower half, a central band or a custom rectangle. Leave out water, clouds and anything that moves, because otherwise the alignment tries to follow the waves. When aligning, the borders that do not have data in all the photos are cropped, so the result comes out slightly smaller than the original.
 
-The script exports the images, waits for the queue to finish, aligns if you asked for it, combines in linear light, imports the resulting TIFF files and opens a comparison sheet with all the chosen operators in Preview. The program's messages (operators, alignment, crop) are kept in `log.txt`. Median and sigma need to keep the whole stack on disk while computing: one hundred 24 megapixel photos take about 14 GB of temporary space, deleted at the end.
+The script exports the images in Adobe RGB (1998), waits for the queue to finish, aligns if you asked for it, combines in linear light, imports the resulting TIFF files and opens a comparison sheet with all the chosen operators in Preview. The program's messages (operators, alignment, crop) are kept in `log.txt`. Median and sigma need to keep the whole stack on disk while computing: one hundred 24 megapixel photos take about 14 GB of temporary space, deleted at the end.
 
 ## How to use the film grain
 
 Select one or more developed images, open the Scripts menu and choose “Film grain”. The script asks for the film (trix, k64, k25, velvia50, pro400h or generic) and the intensity, where 1 is the datasheet granularity. For negative films (trix, pro400h), 1 also includes the gain of printing on paper; if it looks too strong, 0.5 to 0.75 is a good range.
 
-Each image is exported, receives the grain and is imported with the film name added, for example `L1000123_grain_trix.tif`. The grain size is computed from the crop of each variant, taking 36 mm as the long side of the sensor: a photo cropped to half is treated as half a frame and the grain looks proportionally larger, as when enlarging that part of a negative. With another camera format, change the `ladoSensorMm` line of the AppleScript.
+Each image is exported in Adobe RGB (1998), receives the grain and is imported with the film name added, for example `L1000123_grain_trix.tif`. The grain size is computed from the crop of each variant, taking 36 mm as the long side of the sensor: a photo cropped to half is treated as half a frame and the grain looks proportionally larger, as when enlarging that part of a negative. With another camera format, change the `ladoSensorMm` line of the AppleScript.
 
 The model works by FFT at full resolution. With 60 megapixel files each image needs several gigabytes of memory and takes a while, so try a single photo first. Grain is judged at 100 %: a viewer that downsizes the image with a poor filter turns fine grain into blotches.
+
+## How to use the film development
+
+The development uses the same models as the ICC profiles of peliculas.py, but evaluates them directly at each pixel. In Capture One the image must have the normal camera profile, without a film profile; if the script detects a Kodachrome, Velvia, Tri-X or PRO 400H profile it stops, because the film would be applied twice. There is no need to touch the curve: the script sets Linear Response while exporting and then puts it back as it was.
+
+Select the images, open the Scripts menu and choose “Film development”. The script asks for the film. With Tri-X it also asks for the toning (neutral, cold, warm, sepia or selenium) and for the colour filter in front of the lens; with the slides, where the result will be viewed, because a slide was meant to be projected in the dark and on a monitor the contrast should be lowered. Then it asks for the exposure of the film in stops (0 is normal; negative values give a denser, more saturated image) and whether to add the grain of the same film.
+
+While exporting, the script lowers the exposure two stops and gives them back in Python before the model. This way the model receives what lies up to two stops above diffuse white, which is where the shoulder of the film lives, and the highlights are compressed smoothly instead of being clipped. An ICC profile cannot do this, because its input is clipped at white.
+
+The colour filters multiply the spectral sensitivity of Tri-X by the transmittance of the filter and fit the exposure again, compensating the filter factor on a neutral grey, as when opening the aperture by what the factor says. The transmittances approximate those of Wratten 8, 15, 21, 25, 29, 11 and 47; the resulting factors for yellow (about 1 stop), red (2.8) and deep red (3.9) match the usual ones. From Terminal a measured transmittance can be used with `--filter-csv`.
+
+Each image is imported with the film name added, and with `_grain` if grain was requested. The grain is applied after the development, with the same film and the size computed from the crop.
+
+The ICC profile is still useful for editing, because it shows in real time. The suggested way of working is to edit with the film's ICC profile to see where the image is going, go back to the normal camera profile and do the final development with the script.
+
+## How to use the zone map
+
+Select one or more images, open the Scripts menu and choose “Zone map”. There are three modes.
+
+“The print, as developed” reads the image with all its adjustments and spreads the zones in equal steps of lightness, ten units of L* per zone, between black (zone 0) and white (zone X). With this convention zone V falls at L* 50, which corresponds to an 18 % reflectance, middle grey. This is the mode to decide dodging and burning.
+
+“The scene, like a light meter” is the reading in linear light: one stop per zone and middle grey in zone V. The script temporarily sets Linear Response and lowers the exposure three stops so as not to clip the high zones, and then puts everything back as it was.
+
+“What a Tri-X print at grade 2 would give” inverts a modelled print of Tri-X in D-76 printed on Multigrade IV at grade 2: it tells in which zone of the scene each tone should have been exposed to obtain it on that print. It shows how that system compresses highlights and shadows.
+
+For each image two files open in Preview. The false colour map has below it the legend with the percentage of the area in each zone; zone V is neutral grey so that middle grey is recognised at a glance, and clipped highlights and shadows are marked in magenta and blue. The second file is the grey image with the boundaries between zones drawn as contour lines, one colour per boundary. The text in the images follows the language of the dialogs.
 
 ## Where the files end up
 
@@ -121,35 +166,64 @@ Each run creates its own folder with the date and time:
 ~/Pictures/Apilado temporal/stack_YYYYMMDD_HHMMSS/
     input/            TIFF files exported by Capture One
     result/           stacked TIFF files, the ones that are imported
-    comparison.jpg
-    log.txt           program messages (operators, alignment, crop)
+    comparison.jpg    comparison sheet
+    log.txt           program output, with the crop applied if aligned
 
 ~/Pictures/Grano/grain_YYYYMMDD_HHMMSS/
     input_1/, input_2/ ...       exported TIFF files
     result/                      TIFF files with grain, the ones that are imported
     log.txt                      parameters used for each image
+
+~/Pictures/Revelado/development_YYYYMMDD_HHMMSS/
+    input_1/, input_2/ ...       TIFF files exported in linear light
+    work/                        intermediate developments, before the grain
+    result/                      final TIFF files, the ones that are imported
+    log.txt                      development and grain parameters
+
+~/Pictures/Revelado/zones_YYYYMMDD_HHMMSS/
+    input_1/, input_2/ ...       exported TIFF files
+    *_zones_map.jpg, *_zones_contours.jpg
+    log.txt                      percentage of each zone
 ```
 
-With the dialogs in Spanish the names are `apilado_…`, `entrada`, `resultado` and `registro.txt`. The input folders can be deleted once you have checked the result.
+With the dialogs in Spanish the names are `apilado_…`, `grano_…`, `revelado_…`, `zonas_…`, `entrada`, `trabajo`, `resultado` and `registro.txt`. The input and work folders can be deleted once you have checked the result.
 
 ## Use from Terminal, without Capture One
 
-Both programs work on their own with any folder of TIFF, JPEG or PNG files.
+The programs work on their own with any TIFF, JPEG or PNG file. With `-h` any of them shows all its options. Messages and help follow the `LANG` variable, or `--lang en` / `--lang es`. Every option also accepts its Spanish spelling (`--curva`, `--alinear`, `--pelicula`, `--intensidad`, `--virado`…).
 
 ```
 cd ~/Pictures/"Apilado temporal"
 ~/miniforge3/bin/python3 apilado_temporal.py sequence_folder -o result --ops mean,median,max,hann --curve 2.2 --comparison
+~/miniforge3/bin/python3 apilado_temporal.py handheld_sequence -o result --ops median,mean --align --align-model homography --align-region 0,0,1,0.6 --comparison
 ```
 
-`--curve` gives the encoding of the input images: 2.2 for Adobe RGB, 1.8 for ProPhoto, srgb for sRGB. `--align` aligns each photo with the first one (pyramidal ECC, with an initial estimate by phase correlation). `--align-model` selects the transformation: `euclidean` (rotation and shift, the default) for a tripod that has moved, `homography` (full perspective) for hand-held sequences, and also `translation` or `affine`. If there is moving water or clouds, add `--align-region 0,0,1,0.5` (fractions x0,y0,x1,y1) so that only a static region is used. When aligning, the borders left without data in some image are cropped; `--no-crop` keeps them. The results are written as `stack_<operator>_n<N>.tif`.
+`--curve` gives the encoding of the input images: 2.2 for Adobe RGB, 1.8 for ProPhoto, srgb for sRGB. `--align` aligns each photo with the first one (pyramidal ECC, with an initial estimate by phase correlation). `--align-model` selects the transformation: `euclidean` (rotation and shift, the default), `translation`, `affine` or `homography` for hand-held sequences. If there is moving water or clouds, add `--align-region 0,0,1,0.5` (fractions x0,y0,x1,y1) so that only a static region is used. `--no-crop` keeps the original size instead of cropping the borders without data. The results are written as `stack_<operator>_n<N>.tif`; the operators also accept the Spanish names `media`, `mediana`, `maximo` and `minimo`.
 
 ```
 cd ~/Pictures/Grano
-~/miniforge3/bin/python3 grano.py input.tif output.tif --film trix --space adobergb
+~/miniforge3/bin/python3 grano.py input.tif output.tif --film trix --space auto
 ~/miniforge3/bin/python3 grano.py input.jpg web.jpg --film k64 --output-width 2000
 ```
 
-With `-h` either program shows all its options. Messages and help follow the `LANG` variable, or `--lang en` / `--lang es`. Every option also accepts its Spanish spelling (`--curva`, `--alinear`, `--pelicula`, `--intensidad`…), and the operators accept `media`, `mediana`, `maximo` and `minimo`.
+In grano.py, `--space auto` takes the colour space (sRGB, Adobe RGB or ProPhoto) from the embedded profile.
+
+```
+cd ~/Pictures/Revelado
+~/miniforge3/bin/python3 revelado.py input.tif output.tif --film k64 --room dim
+~/miniforge3/bin/python3 revelado.py input.tif output.tif --film trix --toning selenium --filter red --headroom 2
+~/miniforge3/bin/python3 revelado.py --check --film velvia50
+```
+
+In revelado.py the input must be in linear light (Linear Response in Capture One). `--headroom` gives how many stops the exposure was lowered when exporting. `--white paper` sends the base of the paper or slide to white instead of diffuse white, as on a real print. `--exact` computes the full spectral integral at every pixel (slow, for verification) and `--check` measures the error of the spectral table.
+
+```
+~/miniforge3/bin/python3 zonas.py photo.tif
+~/miniforge3/bin/python3 zonas.py photo.tif --mode scene --headroom 3 --smoothing 2
+~/miniforge3/bin/python3 zonas.py photo.tif --mode film --reference pro400h --size 0
+```
+
+In zonas.py, `--size` sets the long side of the generated images (3000 pixels by default, 0 for the original size) and `--smoothing` simplifies the contour lines. The images are named `<photo>_zones_map.jpg` and `<photo>_zones_contours.jpg`.
 
 ## Known problems and how to solve them
 
@@ -161,6 +235,10 @@ If the import fails, the scripts do not stop: they open the result folder and sh
 
 If the processing queue is paused, the scripts warn and do nothing. Just resume it.
 
+If the development or the zone map in scene mode warn that they cannot set the Linear Response curve, Capture One uses another name for it in your language. Set it by hand before running the script, or add the name you see to the `curvasLineales` list of the AppleScript and install again.
+
+The development and zone recipes export in ProPhoto RGB so as not to clip saturated colours before the model. If your Capture One does not have that profile under that name, they use Adobe RGB (1998); the programs read the space from the embedded profile, so they work the same.
+
 ## How to update or uninstall
 
 To update, download the new version (or run `git pull` in the cloned folder) and run `bash instalar.sh` again; it replaces the programs and recompiles the scripts.
@@ -170,7 +248,9 @@ To uninstall:
 ```
 rm ~/Library/Scripts/"Capture One Scripts"/"Temporal stack.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Film grain.scpt"
-rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+rm ~/Library/Scripts/"Capture One Scripts"/"Film development.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Zone map.scpt"
+rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ```
 
-With the dialogs in Spanish, the scripts are called “Apilado temporal.scpt” and “Grano de película.scpt”. The last command also deletes the results saved in those folders, so check them first. The recipes “Temporal stack TIFF 16” and “Film grain TIFF 16” (or “Apilado temporal TIFF 16” and “Grano TIFF 16”) can be deleted in Capture One's recipe tool.
+With the dialogs in Spanish, the scripts are called “Apilado temporal.scpt”, “Grano de película.scpt”, “Revelado de película.scpt” and “Mapa de zonas.scpt”. The last command also deletes the results saved in those folders, so check them first. The recipes “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16” and “Zones TIFF 16” (or their Spanish equivalents) can be deleted in Capture One's recipe tool.
