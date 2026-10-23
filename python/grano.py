@@ -1,66 +1,68 @@
 #!/usr/bin/env python3
-"""grano.py: grano fotografico fisicamente escalado y dependiente del tono.
+"""grano.py: physically scaled, tone-dependent photographic grain.
 
-Modelo, en cuatro pasos:
+The model, in four steps:
 
-1. Nitidez del material. Antes de nada, la imagen pasa por la MTF de la
-   pelicula (gaussiana con el 50 % en --mtf50 ciclos/mm, valor tipico de la
-   hoja tecnica de cada material): una diapositiva de 35 mm nunca es tan nitida
-   como un sensor de 60 Mpx, y el grano añadido sobre una imagen mas nitida
-   que la pelicula se lee como pegado. --mtf50 0 lo desactiva.
+1. Sharpness of the film. First the image goes through the MTF of the film
+   (a Gaussian with 50 % response at --mtf50 cycles/mm, a typical datasheet
+   value for each stock): a 35 mm slide is never as sharp as a 60 Mpx sensor,
+   and grain added on top of an image sharper than the film looks pasted on.
+   --mtf50 0 disables it.
 
-2. Textura. El grano es una superposicion de conglomerados de plata (o de
-   nubes de colorante) colocados al azar: un modelo booleano de discos. Los
-   tamaños no son todos iguales: siguen una distribucion log-normal de
-   mediana --grano-um y anchura --poli (0.35 por defecto; 0 = un solo
-   tamaño). Cada poblacion es independiente, asi que sus espectros de
-   potencia se suman (teorema de Campbell) y el espectro resultante decae sin
-   los anillos del disco unico, como el espectro de Wiener medido en pelicula.
-   Las nubes de colorante llevan el borde difuminado (difusion del colorante
-   al revelar); los conglomerados de plata del B/N, no. --textura gauss
-   reproduce la textura de la primera version (ruido gaussiano filtrado).
+2. Texture. Grain is a random superposition of silver clumps (or dye
+   clouds): a Boolean model of discs. The sizes are not all equal: they follow
+   a log-normal distribution with median --grain-um and width --poly (0.35 by
+   default; 0 = a single size). Each population is independent, so their power
+   spectra add (Campbell's theorem) and the resulting spectrum decays without
+   the rings of a single disc, like the Wiener spectrum measured on film. Dye
+   clouds have a soft edge (dye diffusion during development); the silver
+   clumps of black and white film do not. --texture gauss reproduces the
+   texture of the first version (filtered Gaussian noise).
 
-3. Amplitud. La granularidad rms de la hoja tecnica esta medida con apertura
-   de 48 um a densidad 1.0. La amplitud por pixel se calibra MIDIENDO sobre el
-   propio campo de ruido cuanto vale su rms al promediarlo en un disco de
-   48 um, y escalandolo para que coincida con la del datasheet. Esto es
-   exacto para cualquier textura y resolucion. (La version anterior aplicaba
-   la ley de Selwyn como si el ruido fuera blanco; con grano correlado a
-   10-14 um eso sobrestimaba la amplitud entre 3.8 y 4.7 veces.)
+3. Amplitude. The rms granularity of the datasheet is measured with a 48 um
+   aperture at density 1.0. The per-pixel amplitude is calibrated by MEASURING
+   the rms of the noise field itself averaged over a 48 um disc and scaling it
+   to match the datasheet. This is exact for any texture and resolution. (The
+   previous version applied Selwyn's law as if the noise were white; with grain
+   correlated at 10-14 um that overestimated the amplitude 3.8 to 4.7 times.)
 
-4. Dependencia con el tono. --pelicula selecciona el perfil sigma(densidad
-   mostrada) calculado sobre el eje neutro del modelo espectral de cada
-   material (tabla embebida): en las diapositivas la fluctuacion sigue la
-   estadistica binomial de cobertura de colorante (crece con la densidad y
-   decae al saturar cerca de Dmax); en los sistemas de negativo mas papel
-   (pro400h, trix) el grano nace en el negativo y llega a la copia
-   multiplicado por la pendiente local del papel, que lo anula en los blancos
-   y en los negros: el grano vive en los medios, como en una copia real.
+4. Tone dependence. --film selects the sigma(displayed density) profile
+   computed on the neutral axis of the spectral model of each stock (embedded
+   table): in slides the fluctuation follows the binomial statistics of dye
+   coverage (it grows with density and falls when saturating near Dmax); in
+   negative plus paper systems (pro400h, trix) the grain is born in the
+   negative and reaches the print multiplied by the local slope of the paper,
+   which cancels it in the whites and in the blacks: the grain lives in the
+   midtones, as in a real print.
 
-El ruido se suma en el dominio de densidad, por capa, con correlacion parcial
-entre capas y la componente cromatica escalada aparte (--croma), y se vuelve
-al espacio de entrada (--espacio srgb o adobergb, que fija la curva y los pesos
-de luminancia). Los TIFF de 16 bits se leen y se escriben a 16 bits con
-tifffile, y el perfil ICC de la entrada se conserva en la salida. Requiere numpy
-y Pillow, y tifffile para TIFF.
+The noise is added in the density domain, per layer, with partial correlation
+between layers and the chromatic component scaled separately (--chroma), and
+converted back to the input space (--space srgb or adobergb, which sets the
+curve and the luminance weights). 16 bit TIFF files are read and written at 16
+bits with tifffile, and the ICC profile of the input is kept in the output.
+Needs numpy and Pillow, and tifffile for TIFF.
 
-Como mirarlo. El grano esta escalado a la pelicula: a la resolucion del M11
-cada pixel son 3.8 um, y un pixel de 3.8 um se juzga al 100 %. Reducir la
-imagen con un filtro pobre (muchos visores a "ajustar a ventana") o
-recomprimirla en JPEG a calidad media convierte el grano fino en manchas.
-Para una version reducida, o se aplica el grano directamente a la imagen ya
-reducida (la calibracion vale para cualquier paso de pixel) o se usa
---ancho-salida, que reduce con filtro Lanczos despues de añadir el grano. El
-script guarda los JPEG a calidad 95 sin submuestreo de croma.
+How to look at it. The grain is scaled to the film: at the resolution of a
+Leica M11 each pixel is 3.8 um, and a 3.8 um pixel is judged at 100 %.
+Downsizing with a poor filter (many viewers at "fit to window") or
+recompressing as medium-quality JPEG turns fine grain into blotches. For a
+smaller version, either add the grain to the already downsized image (the
+calibration holds for any pixel pitch) or use --output-width, which downsizes
+with a Lanczos filter after adding the grain. JPEG files are saved at quality
+95 without chroma subsampling.
 
-Uso:
-    python3 grano.py entrada.jpg salida.jpg --pelicula trix
-    python3 grano.py entrada.jpg salida.jpg --pelicula k64 --intensidad 1.3
-    python3 grano.py entrada.jpg salida.jpg --rms 16          # ley generica
-    python3 grano.py recorte.jpg salida.jpg --pelicula k64 --ancho-mm 9.1
-        (un recorte: se indica cuanto mide sobre el fotograma su lado largo)
-    python3 grano.py entrada.jpg web.jpg --pelicula trix --ancho-salida 2000
-        (grano a resolucion completa y reduccion con filtro para la web)
+Messages and help are shown in English or Spanish (--lang, or the LANG
+environment variable). Every option also has its Spanish spelling (--pelicula,
+--intensidad, --espacio, --ancho-mm...).
+
+Usage:
+    python3 grano.py input.jpg output.jpg --film trix
+    python3 grano.py input.jpg output.jpg --film k64 --intensity 1.3
+    python3 grano.py input.jpg output.jpg --rms 16          # generic law
+    python3 grano.py crop.jpg output.jpg --film k64 --width-mm 9.1
+        (a crop: give how long its long side is on the frame)
+    python3 grano.py input.jpg web.jpg --film trix --output-width 2000
+        (grain at full resolution, filtered downsizing for the web)
 """
 import argparse
 import base64
@@ -71,10 +73,108 @@ import zlib
 import numpy as np
 from numpy.fft import rfft2, irfft2
 
+import os
+
+
+def _idioma():
+    """'en' o 'es': --lang/--idioma en la linea de ordenes; si no, LC_ALL, LC_MESSAGES o LANG."""
+    argv = sys.argv[1:]
+    for i, a in enumerate(argv):
+        for clave in ('--lang', '--idioma'):
+            if a == clave and i + 1 < len(argv):
+                return 'es' if argv[i + 1].lower().startswith('es') else 'en'
+            if a.startswith(clave + '='):
+                return 'es' if a.split('=', 1)[1].lower().startswith('es') else 'en'
+    for var in ('LC_ALL', 'LC_MESSAGES', 'LANG'):
+        v = os.environ.get(var)
+        if v:
+            return 'es' if v.lower().startswith('es') else 'en'
+    return 'en'
+
+
+IDIOMA = _idioma()
+TEXTOS = {
+    'en': {
+        'pillow': 'Pillow is missing:  pip install pillow',
+        'tifffile': '16 bit TIFF needs tifffile:  pip install tifffile',
+        'tiff_mal': 'Unsupported TIFF format: %s',
+        'descripcion': 'Physically scaled, tone-dependent photographic grain.',
+        'h_entrada': 'input image (TIFF, JPEG or PNG)',
+        'h_salida': 'output image; the format follows the extension',
+        'h_pelicula': 'film stock: uses its sigma(D) profile and its datasheet values '
+                      '(generic = square-root law)',
+        'h_rms': 'datasheet rms granularity (overrides the stock)',
+        'h_grano': 'characteristic diameter of the grain clump, in microns',
+        'h_textura': 'cloud = dye (soft edge), disc = silver, gauss = texture of the first version',
+        'h_mtf50': 'MTF of the film: cycles/mm at 50 %%; 0 disables it',
+        'h_poli': 'width of the clump size distribution (sigma of the logarithm); '
+                  '0 = a single size; 0.35 by default',
+        'h_ancho_salida': 'if given, downsize the result to this width in px with a Lanczos filter '
+                          '(for the web); 0 = original size',
+        'h_ancho_mm': 'length on the film of the long side of the image (36 = full 24x36 frame)',
+        'h_intensidad': 'grain amplitude; 1 = the datasheet granularity (and, for negative films, '
+                        'printed on paper with gamma 3)',
+        'h_correlacion': 'correlation between layers; 1.0 = monochrome',
+        'h_croma': 'gain of the chromatic component of the grain (0 = achromatic grain, '
+                   '1 = fully independent layers); 0.45 by default in colour',
+        'h_espacio': 'colour space of the input: srgb or adobergb (curve and luminance weights); '
+                     'the ICC profile is kept in the output',
+        'h_semilla': 'seed of the random generator, for repeatable results',
+        'h_dmax': 'maximum displayed density (deepest black)',
+        'h_lang': 'language of messages and help: en or es (default: from LANG)',
+        'resumen': 'grain %s: rms=%g  pitch=%.2f um  texture=%s  grain=%g um (poly %g)  '
+                   'sigma per pixel (D=1)=%.4f%s  [rms measured at 48 um: %.1f]  '
+                   'MTF50=%g c/mm (sigma %.2f px)  chroma=%g%s',
+        'ganancia': '  (print gain x%.2f)',
+        'reducida': '  output downsized to %d px',
+        'textura_nombre': {'nube': 'cloud', 'disco': 'disc', 'gauss': 'gauss'},
+        'pelicula_nombre': {'generico': 'generic'},
+    },
+    'es': {
+        'pillow': 'Falta Pillow:  pip install pillow',
+        'tifffile': 'Para TIFF de 16 bits hace falta tifffile:  pip install tifffile',
+        'tiff_mal': 'Formato TIFF no admitido: %s',
+        'descripcion': 'Grano fotografico fisicamente escalado y dependiente del tono.',
+        'h_entrada': 'imagen de entrada (TIFF, JPEG o PNG)',
+        'h_salida': 'imagen de salida; el formato sigue la extension',
+        'h_pelicula': 'pelicula: usa su perfil sigma(D) y los valores de su hoja tecnica '
+                      '(generico = ley de la raiz cuadrada)',
+        'h_rms': 'granularidad rms del datasheet (anula el preset)',
+        'h_grano': 'diametro caracteristico del conglomerado en micras',
+        'h_textura': 'nube = colorante (borde difuso), disco = plata, gauss = textura de la version anterior',
+        'h_mtf50': 'MTF del material: ciclos/mm al 50 %%; 0 la desactiva',
+        'h_poli': 'anchura de la distribucion de tamaños de conglomerado (sigma del logaritmo); '
+                  '0 = un solo tamaño; 0.35 por defecto',
+        'h_ancho_salida': 'si se indica, reduce el resultado a este ancho en px con filtro Lanczos '
+                          '(para la web); 0 = tamaño original',
+        'h_ancho_mm': 'cuanto mide sobre la pelicula el lado largo de la imagen (36 = fotograma entero de 24x36)',
+        'h_intensidad': 'amplitud del grano; 1 = la granularidad de la hoja tecnica (y, en negativos, '
+                        'copiado en papel de gamma 3)',
+        'h_correlacion': 'correlacion entre capas; 1.0 = monocroma',
+        'h_croma': 'ganancia de la componente cromatica del grano (0 = grano acromatico, '
+                   '1 = capas plenamente independientes); por defecto 0.45 en color',
+        'h_espacio': 'espacio de color de la entrada: srgb o adobergb (curva y pesos de luminancia); '
+                     'el perfil ICC se conserva en la salida',
+        'h_semilla': 'semilla del generador aleatorio, para repetir el resultado',
+        'h_dmax': 'densidad maxima mostrada (el negro mas profundo)',
+        'h_lang': 'idioma de los mensajes y de la ayuda: en o es (por defecto, segun LANG)',
+        'resumen': 'grano %s: rms=%g  pitch=%.2f um  textura=%s  grano=%g um (poli %g)  '
+                   'sigma por pixel (D=1)=%.4f%s  [rms medida a 48 um: %.1f]  '
+                   'MTF50=%g c/mm (sigma %.2f px)  croma=%g%s',
+        'ganancia': '  (ganancia de copia x%.2f)',
+        'reducida': '  salida reducida a %d px',
+        'textura_nombre': {},
+        'pelicula_nombre': {},
+    },
+}
+_T = TEXTOS[IDIOMA]
+TEXTURA_ALIAS = {'cloud': 'nube', 'disc': 'disco', 'disk': 'disco'}
+PELICULA_ALIAS = {'generic': 'generico', 'genérico': 'generico'}
+
 try:
     from PIL import Image
 except ImportError:
-    sys.exit('Falta Pillow:  pip install pillow')
+    sys.exit(_T['pillow'])
 
 _PERFILES_B64 = (
     "eNrtWns8VWu3Xu6XChVCaUtFpE1FFDUkKtckKkpSya2Qe7lFhdiSW1EokZCoVIR0Uy7ZIrmU+2Wx7mvOpUIq57Vb2jvrfOd853z/"
@@ -222,7 +322,7 @@ def leer_imagen(ruta):
         try:
             import tifffile
         except ImportError:
-            sys.exit('Para TIFF de 16 bits hace falta tifffile:  pip install tifffile')
+            sys.exit(_T['tifffile'])
         with tifffile.TiffFile(ruta) as t:
             pag = t.pages[0]
             arr = pag.asarray()
@@ -239,7 +339,7 @@ def leer_imagen(ruta):
         elif arr.dtype == np.uint8:
             escala = 255.0
         else:
-            sys.exit('Formato TIFF no admitido: %s' % arr.dtype)
+            sys.exit(_T['tiff_mal'] % arr.dtype)
         return arr.astype(np.float64) / escala, escala, icc
     im = Image.open(ruta)
     icc = im.info.get('icc_profile')
@@ -372,43 +472,39 @@ def desenfoque_mtf(lin, mtf50, pitch_um):
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
-    ap.add_argument('entrada')
-    ap.add_argument('salida')
-    ap.add_argument('--pelicula', choices=list(PRESETS) + ['generico'],
-                    default='generico',
-                    help='usa el perfil sigma(D) y los valores del material')
-    ap.add_argument('--rms', type=float, default=None,
-                    help='granularidad rms del datasheet (anula el preset)')
-    ap.add_argument('--grano-um', type=float, default=None,
-                    help='diametro caracteristico del conglomerado en micras')
-    ap.add_argument('--textura', choices=['nube', 'disco', 'gauss'], default=None,
-                    help='nube = colorante (borde difuso), disco = plata, '
-                         'gauss = textura de la version anterior')
-    ap.add_argument('--mtf50', type=float, default=None,
-                    help='MTF del material: ciclos/mm al 50 %%; 0 la desactiva')
-    ap.add_argument('--poli', type=float, default=None,
-                    help='anchura de la distribucion de tamaños de conglomerado '
-                         '(sigma del logaritmo); 0 = un solo tamaño; 0.35 por defecto')
-    ap.add_argument('--ancho-salida', type=int, default=0,
-                    help='si se indica, reduce el resultado a este ancho en px con '
-                         'filtro Lanczos (para la web); 0 = tamaño original')
-    ap.add_argument('--ancho-mm', type=float, default=36.0,
-                    help='cuanto mide sobre la pelicula el lado largo de la '
-                         'imagen (36 = fotograma entero de 24x36)')
-    ap.add_argument('--intensidad', type=float, default=1.0)
-    ap.add_argument('--correlacion', type=float, default=None,
-                    help='correlacion entre capas; 1.0 = monocroma')
-    ap.add_argument('--croma', type=float, default=None,
-                    help='ganancia de la componente cromatica del grano '
-                         '(0 = grano acromatico, 1 = capas plenamente '
-                         'independientes); por defecto 0.45 en color')
-    ap.add_argument('--espacio', choices=list(ESPACIOS), default='srgb',
-                    help='espacio de color de la entrada: srgb o adobergb (curva y '
-                         'pesos de luminancia); el perfil ICC se conserva en la salida')
-    ap.add_argument('--semilla', type=int, default=None)
-    ap.add_argument('--dmax-vis', type=float, default=2.6)
+    ap = argparse.ArgumentParser(description=_T['descripcion'])
+    ap.add_argument('entrada', metavar='INPUT' if IDIOMA == 'en' else 'ENTRADA', help=_T['h_entrada'])
+    ap.add_argument('salida', metavar='OUTPUT' if IDIOMA == 'en' else 'SALIDA', help=_T['h_salida'])
+    ap.add_argument('--film', '--pelicula', dest='pelicula', default='generico',
+                    choices=list(PRESETS) + ['generic', 'generico'], help=_T['h_pelicula'])
+    ap.add_argument('--rms', type=float, default=None, help=_T['h_rms'])
+    ap.add_argument('--grain-um', '--grano-um', dest='grano_um', type=float, default=None, help=_T['h_grano'])
+    ap.add_argument('--texture', '--textura', dest='textura', default=None,
+                    choices=['cloud', 'disc', 'gauss', 'nube', 'disco'], help=_T['h_textura'])
+    ap.add_argument('--mtf50', type=float, default=None, help=_T['h_mtf50'])
+    ap.add_argument('--poly', '--poli', dest='poli', type=float, default=None, help=_T['h_poli'])
+    ap.add_argument('--output-width', '--ancho-salida', dest='ancho_salida', type=int, default=0,
+                    help=_T['h_ancho_salida'])
+    ap.add_argument('--width-mm', '--ancho-mm', dest='ancho_mm', type=float, default=36.0, help=_T['h_ancho_mm'])
+    ap.add_argument('--intensity', '--intensidad', dest='intensidad', type=float, default=1.0,
+                    help=_T['h_intensidad'])
+    ap.add_argument('--correlation', '--correlacion', dest='correlacion', type=float, default=None,
+                    help=_T['h_correlacion'])
+    ap.add_argument('--chroma', '--croma', dest='croma', type=float, default=None, help=_T['h_croma'])
+    ap.add_argument('--space', '--espacio', dest='espacio', choices=list(ESPACIOS), default='srgb',
+                    help=_T['h_espacio'])
+    ap.add_argument('--seed', '--semilla', dest='semilla', type=int, default=None, help=_T['h_semilla'])
+    ap.add_argument('--dmax-vis', type=float, default=2.6, help=_T['h_dmax'])
+    ap.add_argument('--lang', '--idioma', dest='lang', choices=['en', 'es'], default=IDIOMA, help=_T['h_lang'])
+    for acc in ap._actions:
+        if acc.option_strings and acc.nargs is None and acc.choices is None and acc.dest != 'help':
+            nombres = [o for o in acc.option_strings if o.startswith('--')]
+            nombre = nombres[0] if IDIOMA == 'en' or len(nombres) < 2 else nombres[1]
+            acc.metavar = nombre.lstrip('-').upper().replace('-', '_')
     a = ap.parse_args()
+    a.pelicula = PELICULA_ALIAS.get(a.pelicula, a.pelicula)
+    if a.textura:
+        a.textura = TEXTURA_ALIAS.get(a.textura, a.textura)
 
     pre = PRESETS.get(a.pelicula, GENERICO)
     rms = a.rms if a.rms is not None else pre['rms']
@@ -479,15 +575,14 @@ def main():
     guardar_imagen(a.salida, res, icc)
     ancho_final = res.shape[1]
     kv = float(np.dot(WV, k_copia))
-    print('grano %s: rms=%g  pitch=%.2f um  textura=%s  grano=%g um (poli %g)  '
-          'sigma por pixel (D=1)=%.4f%s  [rms medida a 48 um: %.1f]  '
-          'MTF50=%g c/mm (sigma %.2f px)  croma=%g%s'
-          % (a.pelicula, rms, pitch_um, textura, gum, poli,
+    print(_T['resumen']
+          % (_T['pelicula_nombre'].get(a.pelicula, a.pelicula), rms, pitch_um,
+             _T['textura_nombre'].get(textura, textura), gum, poli,
              sigma_D1 * kv * a.intensidad,
-             '' if abs(kv - 1) < 1e-6 else '  (ganancia de copia x%.2f)' % kv,
+             '' if abs(kv - 1) < 1e-6 else _T['ganancia'] % kv,
              1000 * sigma_D1 * s48 * a.intensidad,
              mtf50, sigma_mtf, croma,
-             '  salida reducida a %d px' % ancho_final if a.ancho_salida else ''))
+             _T['reducida'] % ancho_final if a.ancho_salida else ''))
 
 
 if __name__ == '__main__':

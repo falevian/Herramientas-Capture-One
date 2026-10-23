@@ -1,42 +1,49 @@
 #!/usr/bin/env python3
 """
-apilado_temporal.py
+apilado_temporal.py: synthetic long exposure by temporal stacking.
 
-Combina una secuencia de fotografías tomadas desde trípode aplicando distintos
-operadores temporales píxel a píxel:
+Combines a sequence of photographs taken from a tripod (or hand-held, with
+--align) by applying a temporal operator pixel by pixel:
 
-  media    equivale a una exposición larga con obturador rectangular
-  hann     media ponderada con ventana de Hann, sin los lóbulos laterales del sinc
-  mediana  estimador robusto: elimina lo transitorio (personas, coches, pájaros)
-  sigma    media con rechazo de valores atípicos (mediana y MAD), robusta y con menos ruido
-  maximo   modo aclarar: estelas de luces y estrellas
-  minimo   modo oscurecer
+  mean     a long exposure with a rectangular shutter
+  hann     weighted mean with a Hann window, without the side lobes of the sinc
+  median   robust estimator: removes transient things (people, cars, birds)
+  sigma    mean with outlier rejection (median and MAD): robust and less noisy
+  max      lighten mode: light trails and star trails
+  min      darken mode
 
-Todo el cálculo se hace en luz lineal. Las imágenes de entrada se linealizan
-según la curva indicada (--curva) y el resultado se vuelve a codificar con la
-misma curva, conservando el perfil ICC de la primera imagen.
+Everything is computed in linear light. The input images are linearised with
+the given curve (--curve) and the result is encoded again with the same
+curve, keeping the ICC profile of the first image.
 
-Con --alinear, cada imagen se registra contra la primera antes de combinarla (ECC en
-pirámide con estimación inicial por correlación de fase) y al final se recortan los
-bordes que no tienen datos en todas las imágenes. --modelo-alineado elige la
-transformación: euclideo para un trípode que se ha movido, homografia para
-secuencias a pulso. --zona-alineado limita el registro a una región estática.
+With --align, each image is registered against the first one before stacking
+(pyramidal ECC with an initial estimate by phase correlation) and the borders
+that lack data in some image are cropped at the end. --align-model selects the
+transformation: euclidean for a tripod that has moved, homography for
+hand-held sequences. --align-region restricts the registration to a static
+region.
 
-Entradas admitidas: TIFF de 8 o 16 bits, JPEG y PNG. Si está instalado rawpy,
-también RAW (se revelan en lineal, espacio sRGB, con el balance de la cámara).
+Accepted inputs: 8 or 16 bit TIFF, JPEG and PNG. With rawpy installed, also
+RAW files (developed linear, sRGB, camera white balance).
 
-Uso típico con Capture One:
-  1. Iguala los ajustes de toda la secuencia (copiar y aplicar ajustes).
-  2. Exporta con una receta TIFF de 16 bits, perfil Adobe RGB (1998).
-  3. Ejecuta:
-       python apilado_temporal.py carpeta_exportada -o carpeta_salida \\
-              --ops media,mediana,maximo,hann --curva 2.2 --comparativa
-  4. Importa los TIFF resultantes en Capture One y revela desde ahí.
+Typical use with Capture One:
+  1. Equalise the adjustments of the whole sequence (copy and apply).
+  2. Export with a 16 bit TIFF recipe, Adobe RGB (1998) profile.
+  3. Run:
+       python apilado_temporal.py exported_folder -o output_folder \\
+              --ops mean,median,max,hann --curve 2.2 --comparison
+  4. Import the resulting TIFF files in Capture One and develop from there.
 
-Curvas habituales: Adobe RGB (1998) -> 2.2, ProPhoto RGB -> 1.8, sRGB -> srgb.
+Usual curves: Adobe RGB (1998) -> 2.2, ProPhoto RGB -> 1.8, sRGB -> srgb.
 
-Dependencias: numpy, tifffile, Pillow. Opcionales: opencv-python (para --alinear)
-y rawpy (para RAW).
+Messages and help are shown in English or Spanish (--lang, or the LANG
+environment variable). Every option also has a Spanish spelling (--curva,
+--alinear, --comparativa...) and the operators accept the Spanish names
+(media, mediana, maximo, minimo). Output files are named stack_<op>_n<N>.tif
+and comparison.jpg.
+
+Dependencies: numpy, tifffile, Pillow. Optional: opencv-python (for --align)
+and rawpy (for RAW).
 """
 
 import argparse
@@ -50,18 +57,118 @@ import numpy as np
 
 EXT_IMAGEN = {".tif", ".tiff", ".jpg", ".jpeg", ".png"}
 EXT_RAW = {".cr2", ".cr3", ".nef", ".arw", ".raf", ".orf", ".rw2", ".dng", ".iiq", ".pef", ".srw"}
-OPS_FLUJO = {"media", "hann", "maximo", "minimo"}
-OPS_PILA = {"mediana", "sigma"}
+OPS_FLUJO = {"mean", "hann", "max", "min"}
+OPS_PILA = {"median", "sigma"}
 OPS_TODAS = OPS_FLUJO | OPS_PILA
-ETIQUETAS = {
-    "media": "Media",
-    "hann": "Hann",
-    "mediana": "Mediana",
-    "sigma": "Sigma",
-    "maximo": "Máximo",
-    "minimo": "Mínimo",
-}
+OPS_ORDEN = ["mean", "hann", "median", "sigma", "max", "min"]
+# nombres aceptados en la línea de órdenes -> nombre canónico
+OPS_ALIAS = {"media": "mean", "mediana": "median", "maximo": "max", "máximo": "max",
+             "minimo": "min", "mínimo": "min", "maximum": "max", "minimum": "min",
+             "average": "mean"}
+MODELOS_ALIAS = {"traslacion": "translation", "traslación": "translation", "euclideo": "euclidean",
+                 "euclídeo": "euclidean", "afin": "affine", "afín": "affine", "homografia": "homography",
+                 "homografía": "homography"}
 ICC_TAG = 34675
+
+
+# ---------------------------------------------------------------- idioma
+
+def _idioma():
+    """'en' o 'es': --lang/--idioma en la línea de órdenes; si no, LC_ALL, LC_MESSAGES o LANG."""
+    argv = sys.argv[1:]
+    for i, a in enumerate(argv):
+        for clave in ("--lang", "--idioma"):
+            if a == clave and i + 1 < len(argv):
+                return "es" if argv[i + 1].lower().startswith("es") else "en"
+            if a.startswith(clave + "="):
+                return "es" if a.split("=", 1)[1].lower().startswith("es") else "en"
+    for var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+        v = os.environ.get(var)
+        if v:
+            return "es" if v.lower().startswith("es") else "en"
+    return "en"
+
+
+IDIOMA = _idioma()
+
+TEXTOS = {
+    "en": {
+        "etiquetas": {"mean": "Mean", "hann": "Hann", "median": "Median", "sigma": "Sigma",
+                      "max": "Maximum", "min": "Minimum"},
+        "rawpy": "Reading {name} needs rawpy (pip install rawpy).",
+        "opencv": "Alignment needs OpenCV (pip install opencv-python).",
+        "no_alinea": "    warning: this image could not be aligned, used as it is",
+        "no_encuentro": "Cannot find {e}",
+        "dos": "At least two images are needed.",
+        "ops_desconocidas": "Unknown operators: {malas}. Available: {buenas} "
+                            "(the Spanish names media, mediana, maximo, minimo are also accepted).",
+        "modelo_desconocido": "Unknown alignment model: {m}. Available: translation, euclidean, affine, homography.",
+        "inicio": "{n} images, operators: {ops}",
+        "zona_mal": "--align-region must be x0,y0,x1,y1 as fractions between 0 and 1, for example 0,0,1,0.5",
+        "pila": "Median and sigma need the whole stack on disk: {gb:.1f} GB in {d}",
+        "tamano": "{name} has a different size ({a} versus {b}).",
+        "recorte": "Cropping the borders without data: {w}x{h} -> {w2}x{h2} pixels",
+        "guardado": "Saved {p}",
+        "curva_mal": "--curve must be a number, srgb or linear",
+        "descripcion": "Synthetic long exposure: combines a sequence with temporal operators in linear light.",
+        "h_entradas": "folder with the sequence, or list of files, in temporal order",
+        "h_salida": "output folder (default: stack)",
+        "h_ops": "comma-separated operators: mean, hann, median, sigma, max, min",
+        "h_curva": "encoding curve of the inputs: an exponent (2.2 Adobe RGB, 1.8 ProPhoto), srgb or linear. Default 2.2",
+        "h_alinear": "align every image with the first one (needs OpenCV)",
+        "h_zona": "static region used for the alignment, as x0,y0,x1,y1 in fractions of the image "
+                  "(for example 0,0,1,0.5 for the upper half). Leave out water and clouds",
+        "h_modelo": "translation, euclidean (shift and rotation, default), affine, or homography "
+                    "(full perspective, for hand-held sequences)",
+        "h_sin_recorte": "with --align, keep the borders that are left without data when the images move",
+        "h_kappa": "rejection threshold for the sigma operator, in MAD units",
+        "h_comparativa": "write comparison.jpg with all the results",
+        "h_temporal": "folder for the temporary stack on disk (median and sigma)",
+        "h_lang": "language of messages and help: en or es (default: from LANG)",
+        "m_entradas": "INPUT", "m_salida": "FOLDER", "m_curva": "CURVE", "m_zona": "X0,Y0,X1,Y1",
+        "m_modelo": "MODEL", "m_temporal": "FOLDER",
+    },
+    "es": {
+        "etiquetas": {"mean": "Media", "hann": "Hann", "median": "Mediana", "sigma": "Sigma",
+                      "max": "Máximo", "min": "Mínimo"},
+        "rawpy": "Para leer {name} hace falta rawpy (pip install rawpy).",
+        "opencv": "El alineado necesita OpenCV (pip install opencv-python).",
+        "no_alinea": "    aviso: no se pudo alinear esta imagen, se usa sin mover",
+        "no_encuentro": "No encuentro {e}",
+        "dos": "Hacen falta al menos dos imágenes.",
+        "ops_desconocidas": "Operadores desconocidos: {malas}. Disponibles: {buenas} "
+                            "(también valen media, mediana, maximo, minimo).",
+        "modelo_desconocido": "Modelo de alineado desconocido: {m}. Disponibles: traslacion, euclideo, afin, homografia.",
+        "inicio": "{n} imágenes, operadores: {ops}",
+        "zona_mal": "--zona-alineado debe ser x0,y0,x1,y1 en fracciones entre 0 y 1, por ejemplo 0,0,1,0.5",
+        "pila": "Mediana o sigma necesitan la pila completa en disco: {gb:.1f} GB en {d}",
+        "tamano": "{name} tiene un tamaño distinto ({a} frente a {b}).",
+        "recorte": "Recorte de los bordes sin datos: {w}x{h} -> {w2}x{h2} píxeles",
+        "guardado": "Guardado {p}",
+        "curva_mal": "--curva debe ser un número, srgb o lineal",
+        "descripcion": "Exposición larga sintética: combina una secuencia con operadores temporales en luz lineal.",
+        "h_entradas": "carpeta con la secuencia o lista de ficheros, en orden temporal",
+        "h_salida": "carpeta de salida (por defecto: stack)",
+        "h_ops": "operadores separados por comas: mean, hann, median, sigma, max, min "
+                 "(o media, mediana, maximo, minimo)",
+        "h_curva": "curva de codificación de las entradas: un exponente (2.2 Adobe RGB, 1.8 ProPhoto), "
+                   "srgb o lineal. Por defecto 2.2",
+        "h_alinear": "alinea cada imagen con la primera (requiere OpenCV)",
+        "h_zona": "región estática usada para alinear, como x0,y0,x1,y1 en fracciones de la imagen "
+                  "(por ejemplo 0,0,1,0.5 para la mitad superior). Deja fuera el agua y el cielo con nubes",
+        "h_modelo": "traslacion, euclideo (giro y desplazamiento, por defecto), afin, u homografia "
+                    "(perspectiva completa, para secuencias a pulso)",
+        "h_sin_recorte": "con --alinear, no recorta los bordes que quedan sin datos al mover las imágenes",
+        "h_kappa": "umbral de rechazo para el operador sigma, en MAD",
+        "h_comparativa": "genera comparison.jpg con todos los resultados",
+        "h_temporal": "carpeta para la pila temporal en disco (mediana y sigma)",
+        "h_lang": "idioma de los mensajes y de la ayuda: en o es (por defecto, según LANG)",
+        "m_entradas": "ENTRADA", "m_salida": "CARPETA", "m_curva": "CURVA", "m_zona": "X0,Y0,X1,Y1",
+        "m_modelo": "MODELO", "m_temporal": "CARPETA",
+    },
+}
+_T = TEXTOS[IDIOMA]
+ETIQUETAS = _T["etiquetas"]
 
 
 # ---------------------------------------------------------------- lectura
@@ -75,7 +182,7 @@ def leer_imagen(ruta):
         try:
             import rawpy
         except ImportError:
-            sys.exit(f"Para leer {ruta.name} hace falta rawpy (pip install rawpy).")
+            sys.exit(_T["rawpy"].format(name=ruta.name))
         with rawpy.imread(str(ruta)) as r:
             arr = r.postprocess(gamma=(1, 1), no_auto_bright=True, output_bps=16,
                                 use_camera_wb=True)
@@ -113,7 +220,7 @@ def leer_imagen(ruta):
 # ---------------------------------------------------------------- curvas
 
 def a_lineal(x, curva):
-    if curva == "lineal":
+    if curva in ("lineal", "linear"):
         return x
     if curva == "srgb":
         return np.where(x <= 0.04045, x / 12.92, ((x + 0.055) / 1.055) ** 2.4).astype(np.float32)
@@ -122,7 +229,7 @@ def a_lineal(x, curva):
 
 def desde_lineal(y, curva):
     y = np.clip(y, 0.0, 1.0)
-    if curva == "lineal":
+    if curva in ("lineal", "linear"):
         return y
     if curva == "srgb":
         return np.where(y <= 0.0031308, y * 12.92, 1.055 * y ** (1 / 2.4) - 0.055).astype(np.float32)
@@ -132,10 +239,10 @@ def desde_lineal(y, curva):
 # ---------------------------------------------------------------- alineado
 
 MODELOS_ALINEADO = {
-    "traslacion": "MOTION_TRANSLATION",   # solo desplazamiento
-    "euclideo": "MOTION_EUCLIDEAN",       # desplazamiento y giro: trípode que se ha movido
-    "afin": "MOTION_AFFINE",              # añade escala y cizalla
-    "homografia": "MOTION_HOMOGRAPHY",    # perspectiva completa: secuencias a pulso
+    "translation": "MOTION_TRANSLATION",  # solo desplazamiento
+    "euclidean": "MOTION_EUCLIDEAN",      # desplazamiento y giro: trípode que se ha movido
+    "affine": "MOTION_AFFINE",            # añade escala y cizalla
+    "homography": "MOTION_HOMOGRAPHY",    # perspectiva completa: secuencias a pulso
 }
 
 
@@ -144,17 +251,17 @@ class Alineador:
     escalas y con una estimación inicial del desplazamiento por correlación de fase,
     para que converja aunque las fotos se hayan movido bastante (secuencias a pulso)."""
 
-    def __init__(self, referencia_lineal, zona=None, modelo="euclideo", lado_max=1600):
+    def __init__(self, referencia_lineal, zona=None, modelo="euclidean", lado_max=1600):
         """zona: (x0, y0, x1, y1) en fracciones de la imagen; solo esa región se usa para alinear.
         Conviene elegir algo estático y con detalle (árboles, rocas, edificios) y dejar fuera
         el agua y las nubes, porque si no el alineado intenta seguir las olas."""
         try:
             import cv2
         except ImportError:
-            sys.exit("El alineado necesita OpenCV (pip install opencv-python).")
+            sys.exit(_T["opencv"])
         self.cv2 = cv2
         self.modo = getattr(cv2, MODELOS_ALINEADO[modelo])
-        self.homografia = modelo == "homografia"
+        self.homografia = modelo == "homography"
         h, w = referencia_lineal.shape[:2]
         fino = min(1.0, lado_max / max(h, w))
         self.escalas = [e for e in (fino / 4, fino / 2, fino) if max(h, w) * e >= 64] or [fino]
@@ -232,7 +339,7 @@ class Alineador:
                 pass
         h, w = img.shape[:2]
         if not convergio:
-            print("    aviso: no se pudo alinear esta imagen, se usa sin mover", file=sys.stderr)
+            print(_T["no_alinea"], file=sys.stderr)
             return img, np.ones((h, w), bool)
         for modo in escalera:
             inicial = matriz.copy()
@@ -376,24 +483,24 @@ def recoger_ficheros(entradas):
         elif p.is_file():
             rutas.append(p)
         else:
-            sys.exit(f"No encuentro {e}")
+            sys.exit(_T["no_encuentro"].format(e=e))
     if len(rutas) < 2:
-        sys.exit("Hacen falta al menos dos imágenes.")
+        sys.exit(_T["dos"])
     return rutas
 
 
 def procesar(args):
     rutas = recoger_ficheros(args.entradas)
-    ops = [o.strip() for o in args.ops.split(",") if o.strip()]
-    desconocidas = set(ops) - OPS_TODAS
+    ops = [o.strip().lower() for o in args.ops.split(",") if o.strip()]
+    ops = list(dict.fromkeys(OPS_ALIAS.get(o, o) for o in ops))
+    desconocidas = [o for o in ops if o not in OPS_TODAS]
     if desconocidas:
-        sys.exit(f"Operadores desconocidos: {', '.join(sorted(desconocidas))}. "
-                 f"Disponibles: {', '.join(sorted(OPS_TODAS))}")
+        sys.exit(_T["ops_desconocidas"].format(malas=", ".join(desconocidas), buenas=", ".join(OPS_ORDEN)))
 
     salida = Path(args.salida)
     salida.mkdir(parents=True, exist_ok=True)
     n = len(rutas)
-    print(f"{n} imágenes, operadores: {', '.join(ops)}")
+    print(_T["inicio"].format(n=n, ops=", ".join(ops)))
 
     primera, icc, es_lineal = leer_imagen(rutas[0])
     curva_entrada = "lineal" if es_lineal else args.curva
@@ -408,20 +515,20 @@ def procesar(args):
             zona = tuple(float(v) for v in args.zona_alineado.split(","))
             assert len(zona) == 4 and 0 <= zona[0] < zona[2] <= 1 and 0 <= zona[1] < zona[3] <= 1
         except (ValueError, AssertionError):
-            sys.exit("--zona-alineado debe ser x0,y0,x1,y1 en fracciones entre 0 y 1, por ejemplo 0,0,1,0.5")
+            sys.exit(_T["zona_mal"])
     alineador = Alineador(ref_lineal, zona, args.modelo_alineado) if args.alinear else None
     validez = np.ones(forma[:2], bool) if alineador else None
 
     pesos = ventana_hann(n)
     acumulados = {}
-    if "media" in ops:
-        acumulados["media"] = np.zeros(forma, np.float64)
+    if "mean" in ops:
+        acumulados["mean"] = np.zeros(forma, np.float64)
     if "hann" in ops:
         acumulados["hann"] = np.zeros(forma, np.float64)
-    if "maximo" in ops:
-        acumulados["maximo"] = np.full(forma, -np.inf, np.float32)
-    if "minimo" in ops:
-        acumulados["minimo"] = np.full(forma, np.inf, np.float32)
+    if "max" in ops:
+        acumulados["max"] = np.full(forma, -np.inf, np.float32)
+    if "min" in ops:
+        acumulados["min"] = np.full(forma, np.inf, np.float32)
 
     necesita_pila = any(o in OPS_PILA for o in ops)
     pila = None
@@ -429,7 +536,7 @@ def procesar(args):
         dir_tmp = Path(args.temporal) if args.temporal else Path(tempfile.gettempdir())
         fichero_pila = dir_tmp / f"pila_{os.getpid()}.u16"
         gigas = n * np.prod(forma) * 2 / 1e9
-        print(f"Mediana o sigma necesitan la pila completa en disco: {gigas:.1f} GB en {dir_tmp}")
+        print(_T["pila"].format(gb=gigas, d=dir_tmp))
         pila = np.memmap(fichero_pila, dtype=np.uint16, mode="w+", shape=(n,) + forma)
 
     for k, ruta in enumerate(rutas):
@@ -439,26 +546,26 @@ def procesar(args):
         else:
             img, _, _ = leer_imagen(ruta)
             if img.shape != forma:
-                sys.exit(f"{ruta.name} tiene un tamaño distinto ({img.shape} frente a {forma}).")
+                sys.exit(_T["tamano"].format(name=ruta.name, a=img.shape, b=forma))
             lin = a_lineal(img, curva_entrada)
             if alineador:
                 lin, valido = alineador.alinear(lin)
                 validez &= valido
-        if "media" in acumulados:
-            acumulados["media"] += lin
+        if "mean" in acumulados:
+            acumulados["mean"] += lin
         if "hann" in acumulados:
             acumulados["hann"] += pesos[k] * lin
-        if "maximo" in acumulados:
-            np.maximum(acumulados["maximo"], lin, out=acumulados["maximo"])
-        if "minimo" in acumulados:
-            np.minimum(acumulados["minimo"], lin, out=acumulados["minimo"])
+        if "max" in acumulados:
+            np.maximum(acumulados["max"], lin, out=acumulados["max"])
+        if "min" in acumulados:
+            np.minimum(acumulados["min"], lin, out=acumulados["min"])
         if pila is not None:
             pila[k] = np.round(np.clip(lin, 0, 1) * 65535).astype(np.uint16)
 
     resultados = {}
-    if "media" in acumulados:
-        resultados["media"] = (acumulados["media"] / n).astype(np.float32)
-    for op in ("hann", "maximo", "minimo"):
+    if "mean" in acumulados:
+        resultados["mean"] = (acumulados["mean"] / n).astype(np.float32)
+    for op in ("hann", "max", "min"):
         if op in acumulados:
             resultados[op] = acumulados[op].astype(np.float32)
 
@@ -466,16 +573,16 @@ def procesar(args):
         pila.flush()
         h, w, c = forma
         filas_bloque = max(1, int(256e6 / (n * w * c * 4)))
-        if "mediana" in ops:
-            resultados["mediana"] = np.empty(forma, np.float32)
+        if "median" in ops:
+            resultados["median"] = np.empty(forma, np.float32)
         if "sigma" in ops:
             resultados["sigma"] = np.empty(forma, np.float32)
         for y0 in range(0, h, filas_bloque):
             y1 = min(h, y0 + filas_bloque)
             bloque = pila[:, y0:y1].astype(np.float32) / 65535.0
             med = np.median(bloque, axis=0)
-            if "mediana" in ops:
-                resultados["mediana"][y0:y1] = med
+            if "median" in ops:
+                resultados["median"][y0:y1] = med
             if "sigma" in ops:
                 mad = np.median(np.abs(bloque - med), axis=0) * 1.4826
                 umbral = args.kappa * np.maximum(mad, 1e-5)
@@ -493,52 +600,51 @@ def procesar(args):
         y0, y1, x0, x1 = rectangulo_valido(validez)
         h, w = validez.shape
         if (y0, y1, x0, x1) != (0, h, 0, w):
-            print(f"Recorte de los bordes sin datos: {w}x{h} -> {x1 - x0}x{y1 - y0} píxeles")
+            print(_T["recorte"].format(w=w, h=h, w2=x1 - x0, h2=y1 - y0))
             for op in resultados:
                 resultados[op] = resultados[op][y0:y1, x0:x1]
 
     codificados = []
     for op in ops:
         datos = desde_lineal(resultados[op], curva_salida)
-        destino = salida / f"apilado_{op}_n{n}.tif"
+        destino = salida / f"stack_{op}_n{n}.tif"
         guardar_tiff(destino, datos, icc)
         codificados.append((ETIQUETAS[op], datos))
-        print(f"Guardado {destino}")
+        print(_T["guardado"].format(p=destino))
 
     if args.comparativa:
-        destino = salida / "comparativa.jpg"
+        destino = salida / "comparison.jpg"
         hoja_comparativa(destino, codificados)
-        print(f"Guardado {destino}")
+        print(_T["guardado"].format(p=destino))
 
 
 def main():
-    p = argparse.ArgumentParser(
-        description="Exposición larga sintética: combina una secuencia con operadores temporales en luz lineal.")
-    p.add_argument("entradas", nargs="+", help="Carpeta con la secuencia o lista de ficheros, en orden temporal")
-    p.add_argument("-o", "--salida", default="apilado", help="Carpeta de salida (por defecto: apilado)")
-    p.add_argument("--ops", default="media,mediana,maximo,hann",
-                   help="Operadores separados por comas: media, hann, mediana, sigma, maximo, minimo")
-    p.add_argument("--curva", default="2.2",
-                   help="Curva de codificación de las entradas: un exponente (2.2 Adobe RGB, 1.8 ProPhoto), "
-                        "srgb o lineal. Por defecto 2.2")
-    p.add_argument("--alinear", action="store_true", help="Alinea cada imagen con la primera (requiere OpenCV)")
-    p.add_argument("--zona-alineado",
-                   help="Región estática usada para alinear, como x0,y0,x1,y1 en fracciones de la imagen "
-                        "(por ejemplo 0,0,1,0.5 para la mitad superior). Deja fuera el agua y el cielo con nubes")
-    p.add_argument("--modelo-alineado", choices=list(MODELOS_ALINEADO), default="euclideo",
-                   help="traslacion, euclideo (giro y desplazamiento, por defecto), afin, "
-                        "u homografia (perspectiva completa, para secuencias a pulso)")
-    p.add_argument("--sin-recorte", action="store_true",
-                   help="Con --alinear, no recorta los bordes que quedan sin datos al mover las imágenes")
-    p.add_argument("--kappa", type=float, default=2.5, help="Umbral de rechazo para el operador sigma, en MAD")
-    p.add_argument("--comparativa", action="store_true", help="Genera comparativa.jpg con todos los resultados")
-    p.add_argument("--temporal", help="Carpeta para la pila temporal en disco (mediana y sigma)")
+    p = argparse.ArgumentParser(description=_T["descripcion"])
+    p.add_argument("entradas", nargs="+", metavar=_T["m_entradas"], help=_T["h_entradas"])
+    p.add_argument("-o", "--output", "--salida", dest="salida", default="stack",
+                   metavar=_T["m_salida"], help=_T["h_salida"])
+    p.add_argument("--ops", default="mean,median,max,hann", help=_T["h_ops"])
+    p.add_argument("--curve", "--curva", dest="curva", default="2.2", metavar=_T["m_curva"], help=_T["h_curva"])
+    p.add_argument("--align", "--alinear", dest="alinear", action="store_true", help=_T["h_alinear"])
+    p.add_argument("--align-region", "--zona-alineado", dest="zona_alineado", metavar=_T["m_zona"], help=_T["h_zona"])
+    p.add_argument("--align-model", "--modelo-alineado", dest="modelo_alineado", default="euclidean",
+                   metavar=_T["m_modelo"], help=_T["h_modelo"])
+    p.add_argument("--no-crop", "--sin-recorte", dest="sin_recorte", action="store_true", help=_T["h_sin_recorte"])
+    p.add_argument("--kappa", type=float, default=2.5, help=_T["h_kappa"])
+    p.add_argument("--comparison", "--comparativa", dest="comparativa", action="store_true", help=_T["h_comparativa"])
+    p.add_argument("--temp", "--temporal", dest="temporal", metavar=_T["m_temporal"], help=_T["h_temporal"])
+    p.add_argument("--lang", "--idioma", dest="lang", choices=["en", "es"], default=IDIOMA, help=_T["h_lang"])
     args = p.parse_args()
-    if args.curva not in ("srgb", "lineal"):
+    args.curva = args.curva.strip().lower()
+    if args.curva not in ("srgb", "lineal", "linear"):
         try:
             float(args.curva)
         except ValueError:
-            sys.exit("--curva debe ser un número, srgb o lineal")
+            sys.exit(_T["curva_mal"])
+    m = args.modelo_alineado.strip().lower()
+    args.modelo_alineado = MODELOS_ALIAS.get(m, m)
+    if args.modelo_alineado not in MODELOS_ALINEADO:
+        sys.exit(_T["modelo_desconocido"].format(m=m))
     procesar(args)
 
 

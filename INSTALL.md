@@ -1,0 +1,176 @@
+# Temporal stacking and film grain for Capture One
+
+This package adds two tools to the Scripts menu of Capture One on macOS. The first, “Temporal stack”, combines a sequence shot on a tripod (or hand-held, aligning it first) with a temporal operator (mean, median, maximum and others) to obtain a synthetic long exposure or to remove transient things. The second, “Film grain”, adds to each selected image a physically scaled grain that depends on the chosen film (Tri-X, Kodachrome, Velvia, Pro 400H) and on the crop of the photo.
+
+Both work the same way: they export the selected variants with all their adjustments as 16 bit TIFF in Adobe RGB (1998), process them with a Python program and import the result back into the open document.
+
+The dialogs appear in English or Spanish. By default they follow the language of macOS; the installer can fix one or the other.
+
+## What the package contains
+
+```
+Herramientas-Capture-One/
+  README.md, README.es.md         short presentation, in English and Spanish
+  INSTALL.md, INSTALL.txt         this guide, in Markdown and plain text
+  INSTALACION.md, INSTALACION.txt the same guide in Spanish
+  LICENSE                         MIT licence
+  instalar.sh                     automatic installer
+  python/
+    apilado_temporal.py           stacks the sequence in linear light, optional alignment
+    grano.py                      grain model calibrated with the datasheets
+  applescript/
+    apilado_capture_one.applescript
+    grano_capture_one.applescript
+```
+
+## What you need before installing
+
+macOS with Capture One Pro, because the scripted processing command only exists in the Pro version. You also need Python 3: by default the tools use miniforge's at `~/miniforge3/bin/python3` and, if it is not there, the system one at `/usr/bin/python3`. The required libraries are numpy, tifffile, pillow and opencv-python, and the installer takes care of them. The AppleScript compiler, `osacompile`, comes with macOS and does not need Xcode.
+
+## Automatic installation
+
+Download the repository from GitHub (“Code” button, “Download ZIP”), unzip it in Downloads, open Terminal and run:
+
+```
+cd ~/Downloads/Herramientas-Capture-One-main
+bash instalar.sh
+```
+
+With git you can clone it instead of downloading the zip:
+
+```
+git clone https://github.com/falevian/Herramientas-Capture-One.git
+cd Herramientas-Capture-One
+bash instalar.sh
+```
+
+The installer creates the folders, copies the Python programs, installs the libraries, compiles the two scripts into the Capture One scripts folder and checks that everything responds. If there was already a different `grano.py` in `~/Pictures/Grano`, it keeps it as `grano_anterior.py` before replacing it.
+
+Two optional variables change the installation:
+
+```
+LANGUAGE=en bash instalar.sh                                 dialogs always in English
+LANGUAGE=es bash instalar.sh                                 dialogs always in Spanish
+PYTHON=~/miniforge3/envs/Photo/bin/python3 bash instalar.sh  use another Python, for example a conda environment
+```
+
+The installer writes the chosen language and Python into the compiled scripts, so nothing has to be edited by hand.
+
+When it finishes, open Capture One and refresh the Scripts menu. “Temporal stack” and “Film grain” should appear (“Apilado temporal” and “Grano de película” when the dialogs are in Spanish).
+
+## Step by step installation
+
+If you prefer to do it by hand, from the unzipped folder:
+
+```
+cd ~/Downloads/Herramientas-Capture-One-main   # or the folder cloned with git
+
+mkdir -p ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Library/Scripts/"Capture One Scripts"
+
+cp python/apilado_temporal.py ~/Pictures/"Apilado temporal"/
+cp python/grano.py ~/Pictures/Grano/
+
+~/miniforge3/bin/python3 -m pip install numpy tifffile pillow opencv-python
+
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Temporal stack.scpt" applescript/apilado_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Film grain.scpt" applescript/grano_capture_one.applescript
+```
+
+`cp` and `osacompile` print nothing when everything goes well. Scripts compiled this way follow the language of macOS and use the default Python; to fix them, edit the `idiomaFijo` and `pythonFijo` lines at the top of each AppleScript before compiling.
+
+The folder names `Apilado temporal` and `Grano` are the same in both languages: the scripts look for the Python programs there.
+
+## How to check that everything is in place
+
+```
+ls ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+ls -l ~/Library/Scripts/"Capture One Scripts"
+~/miniforge3/bin/python3 -c "import numpy, tifffile, PIL, cv2; print('Libraries OK')"
+```
+
+The first command must show `apilado_temporal.py` and `grano.py`, the second the two `.scpt` files with today's date and the third the libraries message.
+
+## How to use the temporal stack
+
+First, equalise the adjustments of the whole sequence: adjust one photo and copy the adjustments to the others. Then select the sequence in the browser, open the Scripts menu and choose “Temporal stack”. A list of operators appears, in which you can tick several at once:
+
+1. mean: the classic long exposure, with a rectangular shutter.
+2. hann: mean weighted with a Hann window, which softens the start and the end and removes the side lobes of the sinc.
+3. median: removes transient things, such as people, cars or birds.
+4. sigma: mean that discards outliers; removes transient things with less noise than the median.
+5. max: lighten mode, for light trails and star trails.
+6. min: darken mode.
+
+Next it asks whether to align the photos before combining them. With a tripod it is not needed. If the tripod has moved or the sequence is hand-held, choose “Align”, say how the photos have moved (rotation and shift for a tripod that has moved, full perspective for a hand-held sequence) and the static region used for the alignment: the whole image, the upper or lower half, a central band or a custom rectangle. Leave out water, clouds and anything that moves. When aligning, the result is cropped to the area that has data in all the images.
+
+The script exports the images, waits for the queue to finish, aligns if you asked for it, combines in linear light, imports the resulting TIFF files and opens a comparison sheet with all the chosen operators in Preview. The program's messages (operators, alignment, crop) are kept in `log.txt`. Median and sigma need to keep the whole stack on disk while computing: one hundred 24 megapixel photos take about 14 GB of temporary space, deleted at the end.
+
+## How to use the film grain
+
+Select one or more developed images, open the Scripts menu and choose “Film grain”. The script asks for the film (trix, k64, k25, velvia50, pro400h or generic) and the intensity, where 1 is the datasheet granularity. For negative films (trix, pro400h), 1 also includes the gain of printing on paper; if it looks too strong, 0.5 to 0.75 is a good range.
+
+Each image is exported, receives the grain and is imported with the film name added, for example `L1000123_grain_trix.tif`. The grain size is computed from the crop of each variant, taking 36 mm as the long side of the sensor: a photo cropped to half is treated as half a frame and the grain looks proportionally larger, as when enlarging that part of a negative. With another camera format, change the `ladoSensorMm` line of the AppleScript.
+
+The model works by FFT at full resolution. With 60 megapixel files each image needs several gigabytes of memory and takes a while, so try a single photo first. Grain is judged at 100 %: a viewer that downsizes the image with a poor filter turns fine grain into blotches.
+
+## Where the files end up
+
+Each run creates its own folder with the date and time:
+
+```
+~/Pictures/Apilado temporal/stack_YYYYMMDD_HHMMSS/
+    input/            TIFF files exported by Capture One
+    result/           stacked TIFF files, the ones that are imported
+    comparison.jpg
+    log.txt           program messages (operators, alignment, crop)
+
+~/Pictures/Grano/grain_YYYYMMDD_HHMMSS/
+    input_1/, input_2/ ...       exported TIFF files
+    result/                      TIFF files with grain, the ones that are imported
+    log.txt                      parameters used for each image
+```
+
+With the dialogs in Spanish the names are `apilado_…`, `entrada`, `resultado` and `registro.txt`. The input folders can be deleted once you have checked the result.
+
+## Use from Terminal, without Capture One
+
+Both programs work on their own with any folder of TIFF, JPEG or PNG files.
+
+```
+cd ~/Pictures/"Apilado temporal"
+~/miniforge3/bin/python3 apilado_temporal.py sequence_folder -o result --ops mean,median,max,hann --curve 2.2 --comparison
+```
+
+`--curve` gives the encoding of the input images: 2.2 for Adobe RGB, 1.8 for ProPhoto, srgb for sRGB. `--align` aligns each photo with the first one (pyramidal ECC, with an initial estimate by phase correlation). `--align-model` selects the transformation: `euclidean` (rotation and shift, the default) for a tripod that has moved, `homography` (full perspective) for hand-held sequences, and also `translation` or `affine`. If there is moving water or clouds, add `--align-region 0,0,1,0.5` (fractions x0,y0,x1,y1) so that only a static region is used. When aligning, the borders left without data in some image are cropped; `--no-crop` keeps them. The results are written as `stack_<operator>_n<N>.tif`.
+
+```
+cd ~/Pictures/Grano
+~/miniforge3/bin/python3 grano.py input.tif output.tif --film trix --space adobergb
+~/miniforge3/bin/python3 grano.py input.jpg web.jpg --film k64 --output-width 2000
+```
+
+With `-h` either program shows all its options. Messages and help follow the `LANG` variable, or `--lang en` / `--lang es`. Every option also accepts its Spanish spelling (`--curva`, `--alinear`, `--pelicula`, `--intensidad`…), and the operators accept `media`, `mediana`, `maximo` and `minimo`.
+
+## Known problems and how to solve them
+
+The first time each script runs, macOS asks for permission for it to control Capture One. Accept it. If it was refused by mistake, it can be enabled in System Settings, Privacy & Security, Automation.
+
+The message “Invalid process output folder” appears when the catalog has no valid output folder. The scripts avoid it by pointing the document's output temporarily at their own folder and restoring it at the end, but it is worth setting a real output folder in the catalog's output location tool, because any other recipe will give the same error.
+
+If the import fails, the scripts do not stop: they open the result folder and show what Capture One answered, so you can import it by hand. Note that when importing, Capture One applies the document's import settings, so in a catalog it may copy the files to the location you have defined.
+
+If the processing queue is paused, the scripts warn and do nothing. Just resume it.
+
+## How to update or uninstall
+
+To update, download the new version (or run `git pull` in the cloned folder) and run `bash instalar.sh` again; it replaces the programs and recompiles the scripts.
+
+To uninstall:
+
+```
+rm ~/Library/Scripts/"Capture One Scripts"/"Temporal stack.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Film grain.scpt"
+rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano
+```
+
+With the dialogs in Spanish, the scripts are called “Apilado temporal.scpt” and “Grano de película.scpt”. The last command also deletes the results saved in those folders, so check them first. The recipes “Temporal stack TIFF 16” and “Film grain TIFF 16” (or “Apilado temporal TIFF 16” and “Grano TIFF 16”) can be deleted in Capture One's recipe tool.
