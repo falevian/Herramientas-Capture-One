@@ -12,7 +12,7 @@ This package adds five tools to the Scripts menu of Capture One on macOS.
 
 “Median contrast” raises or lowers the contrast while keeping fixed the tone at the median of the lightness, so the image gets neither lighter nor darker in that sense. It can write the curve into Capture One, where it stays editable, or apply it in Python.
 
-All of them work the same way: they export the selected variants as 16 bit TIFF, process them with a Python program and import the result back into the open document (the zone map opens in Preview, and the median contrast can stay as a curve inside Capture One).
+All of them export the selected variants as 16 bit TIFF and process them with a Python program, but they hand back different results. The temporal stack, the film grain and the film development import new TIFF files into the open document. The zone map opens its two images in Preview and changes nothing in the catalog. The median contrast, in its Capture One mode, writes an editable Luma curve into the image or the selected layer and creates no new file: it only exports small temporary copies to measure the median. In its Python mode it imports a new TIFF like the first three.
 
 The dialogs appear in English or Spanish. By default they follow the language of macOS; the installer can fix one or the other.
 

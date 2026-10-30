@@ -12,7 +12,7 @@ Este paquete añade cinco herramientas al menú Scripts de Capture One en macOS.
 
 “Contraste en la mediana” sube o baja el contraste dejando fijo el tono que está en la mediana de la luminosidad, de modo que la imagen ni se aclara ni se oscurece en ese sentido. Puede escribir la curva en Capture One, donde queda editable, o aplicarla en Python.
 
-Todas funcionan igual: exportan las variantes seleccionadas como TIFF de 16 bits, las procesan con un programa en Python y vuelven a importar el resultado en el documento abierto (el mapa de zonas se abre en Vista Previa, y el contraste en la mediana puede quedarse como curva dentro de Capture One).
+Todas exportan las variantes seleccionadas como TIFF de 16 bits y las procesan con un programa en Python, pero no todas devuelven lo mismo. El apilado temporal, el grano y el revelado de película importan TIFF nuevos en el documento abierto. El mapa de zonas abre sus dos imágenes en Vista Previa y no cambia nada en el catálogo. El contraste en la mediana, en su modo de Capture One, escribe una curva Luma editable en la imagen o en la capa seleccionada y no crea ningún archivo nuevo: solo exporta copias pequeñas y temporales para medir la mediana. En su modo Python importa un TIFF nuevo, como las tres primeras.
 
 Los diálogos salen en español o en inglés. Por defecto siguen el idioma de macOS; el instalador puede fijar uno u otro.
 
