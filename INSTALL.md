@@ -171,6 +171,8 @@ The curve is a logistic with its pivot at the median: in normalised lightness x 
 
 Select the images, open the Scripts menu and choose “Median contrast”. The script asks for the contrast (soft 1.15, medium 1.3, strong 1.5, lower to 0.8, or another value) and how to apply it.
 
+The script works on the layer you have selected. If it is the image layer, the contrast applies to the whole photo. If it is an adjustment layer with a mask (drawn, gradient, luminosity or AI generated), the median is measured only inside the mask and the curve is written into the Luma curve of that layer. Capture One does not allow the mask to be exported, so the script works it out: it exports two small versions with the curve of the layer flattened, one to black and one to white, and the difference between them gives the weight of the mask at each pixel, feathering included. The median is computed weighted by that weight. Clone and heal layers do not accept curves, and the Python mode always works on the whole image.
+
 “Luma curve in Capture One” writes the curve into the Curve tool, Luma channel, which changes lightness without touching saturation, and leaves it editable. As Capture One applies its curves in its own scale, the script measures instead of assuming: it exports a small version without curve, computes the median, places the curve with the pivot and exports again until the median with the curve matches the one without it, usually in three or four exports. It replaces any Luma curve the image had; if something fails, it leaves it as it was.
 
 “New TIFF with Python” exports the full image, applies the exact curve on L* keeping chromaticity and imports the result with `_contrast` in the name.
@@ -206,12 +208,13 @@ Each run creates its own folder with the date and time:
 
 ~/Pictures/Revelado/median_YYYYMMDD_HHMMSS/
     measure_*/                   small exports used to measure (Capture One mode)
+    mask_*                       black and white exports and the mask worked out from the layer
     input_*/                     full exports (Python mode)
     result/                      TIFF files with the contrast applied (Python mode)
     log.txt                      report for each image
 ```
 
-With the dialogs in Spanish the names are `apilado_…`, `grano_…`, `revelado_…`, `zonas_…`, `mediana_…`, `entrada`, `trabajo`, `medida`, `resultado` and `registro.txt`. The input and work folders can be deleted once you have checked the result.
+With the dialogs in Spanish the names are `apilado_…`, `grano_…`, `revelado_…`, `zonas_…`, `mediana_…`, `entrada`, `trabajo`, `medida`, `mascara`, `resultado` and `registro.txt`. The input and work folders can be deleted once you have checked the result.
 
 ## Use from Terminal, without Capture One
 
@@ -254,9 +257,11 @@ In zonas.py, `--size` sets the long side of the generated images (3000 pixels by
 ~/miniforge3/bin/python3 contraste_mediana.py measure photo.tif
 ~/miniforge3/bin/python3 contraste_mediana.py apply photo.tif output.tif --contrast 1.3
 ~/miniforge3/bin/python3 contraste_mediana.py apply photo.tif output.tif --contrast 1.3 --method rgb --region 0,0.4,1,1
+~/miniforge3/bin/python3 contraste_mediana.py mask black.tif white.tif mask.tif
+~/miniforge3/bin/python3 contraste_mediana.py measure photo.tif --mask mask.tif
 ```
 
-In contraste_mediana.py, `--method rgb` applies the curve channel by channel, which saturates like a film; the pivot is readjusted so that the median of the lightness does not change either. `--region` restricts the computation of the median to a rectangle, for example to leave out a white sky or a black frame, while the curve is applied to the whole image. `points --pivot 46.5 --contrast 1.3` prints the points of the curve for Capture One's Luma curve. The commands also have Spanish names: `medir`, `puntos` and `aplicar`.
+In contraste_mediana.py, `--method rgb` applies the curve channel by channel, which saturates like a film; the pivot is readjusted so that the median of the lightness does not change either. `--region` restricts the computation of the median to a rectangle, for example to leave out a white sky or a black frame, while the curve is applied to the whole image. `points --pivot 46.5 --contrast 1.3` prints the points of the curve for Capture One's Luma curve. `mask` works out the mask of a layer from the two exports with its curve flattened to black and to white, and `measure --mask` gives the weighted median inside it. The commands also have Spanish names: `medir`, `puntos`, `aplicar` and `mascara`.
 
 ## Known problems and how to solve them
 

@@ -2,6 +2,8 @@
 --
 -- Raises or lowers the contrast keeping fixed the tone at the median of the
 -- lightness, so the image gets neither lighter nor darker in that sense.
+-- It works on the selected layer: if it is an adjustment layer with a mask, the
+-- median is measured inside the mask and the curve is written into that layer.
 --
 -- Two modes:
 --   Luma curve in Capture One: writes the curve into the Curve tool, Luma channel,
@@ -172,16 +174,65 @@ end run
 
 on curvaEnCapture(doc, variante, k, carpetaRun, rutaPython, rutaScript, contraste, subeContraste)
 	set errorEscritura to my t("ERROR Could not write the Luma curve by script. Try the New TIFF with Python mode.", "ERROR No pude escribir la curva Luma por script. Prueba el modo TIFF nuevo con Python.")
-	set puntosOriginales to my leerCurva(variante)
-	if not my ponerCurva(variante, {{0, 0}, {100, 100}}) then
-		my restaurarCurva(variante, puntosOriginales)
+	-- the curve goes to the selected layer; if it is the image layer, to the whole image
+	tell application "Capture One"
+		set capa to current layer of variante
+		set esFondo to (kind of capa is background)
+		set esRetoque to (kind of capa is heal) or (kind of capa is clone)
+		set nombreCapa to name of capa
+	end tell
+	if esRetoque then return my t("ERROR The selected layer is a clone or heal layer and does not accept curves. Select an adjustment layer or the image layer.", "ERROR La capa seleccionada es de clonar o reparar y no admite curvas. Selecciona una capa de ajustes o la capa de imagen.")
+	if esFondo then
+		set objetivo to variante
+		set dondeTexto to my t("the whole image", "toda la imagen")
+	else
+		set objetivo to capa
+		set dondeTexto to my t("the layer \"", "la capa \"") & nombreCapa & "\""
+	end if
+	set puntosOriginales to my leerCurva(objetivo)
+	set mascara to ""
+
+	-- mask of the layer: two exports with its curve flattened to black and to white
+	if not esFondo then
+		set errorCapa to my t("ERROR Could not write the Luma curve of the layer by script.", "ERROR No pude escribir la curva Luma de la capa por script.")
+		if not my ponerCurva(objetivo, {{0, 0}, {100, 0}}) then
+			my restaurarCurva(objetivo, puntosOriginales)
+			return errorCapa
+		end if
+		set tifNegra to my exportar(doc, variante, carpetaRun & my t("mask_", "mascara_") & k & my t("_black/", "_negra/"))
+		if not my ponerCurva(objetivo, {{0, 100}, {100, 100}}) then
+			my restaurarCurva(objetivo, puntosOriginales)
+			return errorCapa
+		end if
+		set tifBlanca to my exportar(doc, variante, carpetaRun & my t("mask_", "mascara_") & k & my t("_white/", "_blanca/"))
+		if tifNegra is "" or tifBlanca is "" then
+			my restaurarCurva(objetivo, puntosOriginales)
+			return my t("ERROR Could not export the image to work out the mask.", "ERROR No pude exportar la imagen para deducir la máscara.")
+		end if
+		set mascara to carpetaRun & my t("mask_", "mascara_") & k & ".tif"
+		try
+			set sup to do shell script quoted form of rutaPython & " " & quoted form of rutaScript & " mask " & quoted form of tifNegra & " " & quoted form of tifBlanca & " " & quoted form of mascara & " | grep MASCARA_SUPERFICIE= | cut -d= -f2"
+			set superficie to (my reemplazar(sup, ".", my separadorDecimal())) as real
+		on error msg
+			my restaurarCurva(objetivo, puntosOriginales)
+			return my t("ERROR Could not work out the mask: ", "ERROR No pude deducir la máscara: ") & msg
+		end try
+		if superficie < 0.001 then
+			my restaurarCurva(objetivo, puntosOriginales)
+			return my t("ERROR The mask of the layer \"", "ERROR La máscara de la capa \"") & nombreCapa & my t("\" is empty.", "\" está vacía.")
+		end if
+		set dondeTexto to dondeTexto & " (" & my redondear(superficie * 100, 1) & my t(" % of the image)", " % de la imagen)")
+	end if
+
+	if not my ponerCurva(objetivo, {{0, 0}, {100, 100}}) then
+		my restaurarCurva(objetivo, puntosOriginales)
 		return errorEscritura
 	end if
 
-	-- median without curve
-	set m to my medirExportando(doc, variante, carpetaRun & my t("measure_", "medida_") & k & "_0/", rutaPython, rutaScript)
+	-- median without curve, inside the mask if there is one
+	set m to my medirExportando(doc, variante, carpetaRun & my t("measure_", "medida_") & k & "_0/", rutaPython, rutaScript, mascara)
 	if m is missing value then
-		my restaurarCurva(variante, puntosOriginales)
+		my restaurarCurva(objetivo, puntosOriginales)
 		return my t("ERROR Could not export and measure the image.", "ERROR No pude exportar y medir la imagen.")
 	end if
 
@@ -197,13 +248,13 @@ on curvaEnCapture(doc, variante, k, carpetaRun, rutaPython, rutaScript, contrast
 	repeat with iter from 1 to maxIteraciones
 		if p < 2 then set p to 2
 		if p > 98 then set p to 98
-		if not my ponerCurva(variante, my puntosCurva(rutaPython, rutaScript, p, contraste)) then
-			my restaurarCurva(variante, puntosOriginales)
+		if not my ponerCurva(objetivo, my puntosCurva(rutaPython, rutaScript, p, contraste)) then
+			my restaurarCurva(objetivo, puntosOriginales)
 			return errorEscritura
 		end if
-		set mp to my medirExportando(doc, variante, carpetaRun & my t("measure_", "medida_") & k & "_" & iter & "/", rutaPython, rutaScript)
+		set mp to my medirExportando(doc, variante, carpetaRun & my t("measure_", "medida_") & k & "_" & iter & "/", rutaPython, rutaScript, mascara)
 		if mp is missing value then
-			my restaurarCurva(variante, puntosOriginales)
+			my restaurarCurva(objetivo, puntosOriginales)
 			return my t("ERROR Could not export and measure the image with the curve.", "ERROR No pude exportar y medir la imagen con la curva.")
 		end if
 		set e to mp - m
@@ -231,11 +282,11 @@ on curvaEnCapture(doc, variante, k, carpetaRun, rutaPython, rutaScript, contrast
 			if p > hi - 0.1 * ancho then set p to hi - 0.1 * ancho
 		end if
 	end repeat
-	if mejorP is not p then my ponerCurva(variante, my puntosCurva(rutaPython, rutaScript, mejorP, contraste))
-	return my t("median L* ", "mediana L* ") & my redondear(m, 1) & my t(" kept with an error of ", " conservada con un error de ") & my redondear(mejorErr, 2) & my t(" (contrast ", " (contraste ") & contraste & my t(", curve pivot at ", ", pivote de la curva en ") & my redondear(mejorP, 1) & my t(" on the Capture One scale)", " en la escala de Capture One)")
+	if mejorP is not p then my ponerCurva(objetivo, my puntosCurva(rutaPython, rutaScript, mejorP, contraste))
+	return dondeTexto & ": " & my t("median L* ", "mediana L* ") & my redondear(m, 1) & my t(" kept with an error of ", " conservada con un error de ") & my redondear(mejorErr, 2) & my t(" (contrast ", " (contraste ") & contraste & my t(", curve pivot at ", ", pivote de la curva en ") & my redondear(mejorP, 1) & my t(" on the Capture One scale)", " en la escala de Capture One)")
 end curvaEnCapture
 
-on medirExportando(doc, variante, carpeta, rutaPython, rutaScript)
+on exportar(doc, variante, carpeta)
 	do shell script "mkdir -p " & quoted form of carpeta
 	set carpetaA to (POSIX file carpeta) as alias
 	tell application "Capture One"
@@ -243,14 +294,20 @@ on medirExportando(doc, variante, carpeta, rutaPython, rutaScript)
 			set output of doc to carpetaA
 			set resultado to process variante recipe nombreReceta
 		on error msg
-			return missing value
+			return ""
 		end try
 	end tell
-	if resultado starts with "ERROR" then return missing value
-	set tif to my esperarTif(doc, carpeta, minutosEspera)
+	if resultado starts with "ERROR" then return ""
+	return my esperarTif(doc, carpeta, minutosEspera)
+end exportar
+
+on medirExportando(doc, variante, carpeta, rutaPython, rutaScript, mascara)
+	set tif to my exportar(doc, variante, carpeta)
 	if tif is "" then return missing value
+	set extra to ""
+	if mascara is not "" then set extra to " --mask " & quoted form of mascara
 	try
-		set salida to do shell script quoted form of rutaPython & " " & quoted form of rutaScript & " measure " & quoted form of tif & " | grep MEDIANA_LSTAR= | cut -d= -f2"
+		set salida to do shell script quoted form of rutaPython & " " & quoted form of rutaScript & " measure " & quoted form of tif & extra & " | grep MEDIANA_LSTAR= | cut -d= -f2"
 		return (my reemplazar(salida, ".", my separadorDecimal())) as real
 	on error
 		return missing value
@@ -273,11 +330,11 @@ on puntosCurva(rutaPython, rutaScript, p, contraste)
 	return lista
 end puntosCurva
 
-on leerCurva(variante)
+on leerCurva(objetivo)
 	set lista to {}
 	try
 		tell application "Capture One"
-			set pts to curve points of luma curve of adjustments of variante
+			set pts to curve points of luma curve of adjustments of objetivo
 			repeat with cp in pts
 				set end of lista to {brightness of cp, amount of cp}
 			end repeat
@@ -287,12 +344,12 @@ on leerCurva(variante)
 end leerCurva
 
 -- Replaces the points of the Luma curve; returns whether it worked
-on ponerCurva(variante, puntos)
+on ponerCurva(objetivo, puntos)
 	tell application "Capture One"
 		try
-			delete every curve point of luma curve of adjustments of variante
+			delete every curve point of luma curve of adjustments of objetivo
 		end try
-		set restantes to count of curve points of luma curve of adjustments of variante
+		set restantes to count of curve points of luma curve of adjustments of objetivo
 	end tell
 	-- if Capture One keeps the end points, they are adjusted instead of created
 	repeat with pt in puntos
@@ -301,7 +358,7 @@ on ponerCurva(variante, puntos)
 		set hecho to false
 		if restantes > 0 then
 			tell application "Capture One"
-				repeat with cp in (curve points of luma curve of adjustments of variante)
+				repeat with cp in (curve points of luma curve of adjustments of objetivo)
 					if my absoluto((brightness of cp) - valorBrillo) < 0.01 then
 						set amount of cp to valorCantidad
 						set hecho to true
@@ -312,10 +369,10 @@ on ponerCurva(variante, puntos)
 		end if
 		if not hecho then
 			try
-				tell application "Capture One" to make new curve point at end of curve points of luma curve of adjustments of variante with properties {brightness:valorBrillo, amount:valorCantidad}
+				tell application "Capture One" to make new curve point at end of curve points of luma curve of adjustments of objetivo with properties {brightness:valorBrillo, amount:valorCantidad}
 			on error
 				try
-					tell application "Capture One" to tell (luma curve of adjustments of variante) to make new curve point with properties {brightness:valorBrillo, amount:valorCantidad}
+					tell application "Capture One" to tell (luma curve of adjustments of objetivo) to make new curve point with properties {brightness:valorBrillo, amount:valorCantidad}
 				on error
 					return false
 				end try
@@ -326,7 +383,7 @@ on ponerCurva(variante, puntos)
 	set central to item (((count of puntos) + 1) div 2) of puntos
 	try
 		tell application "Capture One"
-			repeat with cp in (curve points of luma curve of adjustments of variante)
+			repeat with cp in (curve points of luma curve of adjustments of objetivo)
 				if my absoluto((brightness of cp) - (item 1 of central)) < 0.05 and my absoluto((amount of cp) - (item 2 of central)) < 0.05 then return true
 			end repeat
 		end tell
@@ -334,16 +391,18 @@ on ponerCurva(variante, puntos)
 	return false
 end ponerCurva
 
-on restaurarCurva(variante, puntos)
+on restaurarCurva(objetivo, puntos)
 	if (count of puntos) < 2 then set puntos to {{0, 0}, {100, 100}}
 	try
-		my ponerCurva(variante, puntos)
+		my ponerCurva(objetivo, puntos)
 	end try
 end restaurarCurva
 
 -- ---------------------------------------------------------------- Python TIFF mode
 
 on tiffConPython(doc, variante, k, carpetaRun, carpetaSalida, rutaPython, rutaScript, contraste)
+	tell application "Capture One" to set esFondo to (kind of (current layer of variante) is background)
+	if not esFondo then return my t("ERROR A layer is selected. The Python mode always works on the whole image; to apply the contrast inside a mask use the Luma curve in Capture One mode, or select the image layer.", "ERROR Hay una capa seleccionada. El modo Python trabaja sobre la imagen entera; para aplicar el contraste en una máscara usa el modo Curva Luma en Capture One, o selecciona la capa de imagen.")
 	set carpeta to carpetaRun & my t("input_", "entrada_") & k & "/"
 	do shell script "mkdir -p " & quoted form of carpeta
 	set carpetaA to (POSIX file carpeta) as alias

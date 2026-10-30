@@ -166,6 +166,8 @@ La curva es una logística con el pivote en la mediana: en la luminosidad normal
 
 Selecciona las imágenes, abre el menú Scripts y elige “Contraste en la mediana”. El script pregunta el contraste (suave 1,15, medio 1,3, fuerte 1,5, bajar a 0,8, u otro valor) y cómo aplicarlo.
 
+El script trabaja sobre la capa que tengas seleccionada. Si es la capa de imagen, el contraste se aplica a toda la foto. Si es una capa de ajustes con máscara (dibujada, de degradado, de luminosidad o generada por la IA), la mediana se mide solo dentro de la máscara y la curva se escribe en la curva Luma de esa capa. Capture One no deja exportar la máscara, así que el script la deduce: exporta dos versiones pequeñas con la curva de la capa aplanada, una en negro y otra en blanco, y la diferencia entre ambas da el peso de la máscara en cada píxel, con el difuminado incluido. La mediana se calcula ponderada por ese peso. Las capas de clonar y de reparar no admiten curvas, y el modo Python trabaja siempre sobre la imagen entera.
+
 “Curva Luma en Capture One” escribe la curva en la herramienta Curva, canal Luma, que cambia la luminosidad sin tocar la saturación, y la deja editable. Como Capture One aplica sus curvas en su propia escala, el script mide en lugar de suponer: exporta una versión pequeña sin curva, calcula la mediana, coloca la curva con el pivote y vuelve a exportar hasta que la mediana con curva coincide con la de sin curva, normalmente en tres o cuatro exportaciones. Sustituye la curva Luma que hubiera en la imagen; si algo falla, la deja como estaba.
 
 “TIFF nuevo con Python” exporta la imagen completa, aplica la curva exacta sobre L* conservando la cromaticidad e importa el resultado con _contraste en el nombre.
@@ -201,11 +203,12 @@ Cada ejecución crea su propia carpeta con la fecha y la hora:
 
     ~/Pictures/Revelado/mediana_AAAAMMDD_HHMMSS/
         medida_*/                    exportaciones pequeñas para medir (modo Capture One)
+        mascara_*                    exportaciones en negro y en blanco y máscara deducida de la capa
         entrada_*/                   exportaciones completas (modo Python)
         resultado/                   TIFF con el contraste aplicado (modo Python)
         registro.txt                 informe de cada imagen
 
-Con los diálogos en inglés los nombres son stack_…, grain_…, development_…, zones_…, median_…, input, work, measure, result y log.txt. Las carpetas de entrada y de trabajo se pueden borrar cuando hayas comprobado el resultado.
+Con los diálogos en inglés los nombres son stack_…, grain_…, development_…, zones_…, median_…, input, work, measure, mask, result y log.txt. Las carpetas de entrada y de trabajo se pueden borrar cuando hayas comprobado el resultado.
 
 Uso desde Terminal, sin Capture One
 -----------------------------------
@@ -240,8 +243,10 @@ En zonas.py, --lado fija el lado largo de las imágenes generadas (3000 píxeles
     ~/miniforge3/bin/python3 contraste_mediana.py medir foto.tif
     ~/miniforge3/bin/python3 contraste_mediana.py aplicar foto.tif salida.tif --contraste 1.3
     ~/miniforge3/bin/python3 contraste_mediana.py aplicar foto.tif salida.tif --contraste 1.3 --metodo rgb --zona 0,0.4,1,1
+    ~/miniforge3/bin/python3 contraste_mediana.py mascara negra.tif blanca.tif mascara.tif
+    ~/miniforge3/bin/python3 contraste_mediana.py medir foto.tif --mascara mascara.tif
 
-En contraste_mediana.py, --metodo rgb aplica la curva canal a canal, lo que satura como una película; el pivote se reajusta para que la mediana de la luminosidad tampoco cambie. --zona limita el cálculo de la mediana a un rectángulo, por ejemplo para no contar un cielo blanco o un marco negro, aunque la curva se aplica a toda la imagen. puntos --pivote 46.5 --contraste 1.3 imprime los puntos de la curva para la curva Luma de Capture One. Las órdenes tienen también nombre en inglés: measure, points y apply.
+En contraste_mediana.py, --metodo rgb aplica la curva canal a canal, lo que satura como una película; el pivote se reajusta para que la mediana de la luminosidad tampoco cambie. --zona limita el cálculo de la mediana a un rectángulo, por ejemplo para no contar un cielo blanco o un marco negro, aunque la curva se aplica a toda la imagen. puntos --pivote 46.5 --contraste 1.3 imprime los puntos de la curva para la curva Luma de Capture One. mascara deduce la máscara de una capa a partir de las dos exportaciones con su curva aplanada en negro y en blanco, y medir --mascara da la mediana ponderada dentro de ella. Las órdenes tienen también nombre en inglés: measure, points, apply y mask.
 
 Problemas conocidos y cómo resolverlos
 --------------------------------------

@@ -15,9 +15,10 @@ and its slope at the median is exactly c: with c > 1 contrast rises in an S
 shape and with c < 1 it falls. Near the ends it behaves like x^c, so with c > 1
 it gently tightens the deepest shadows and the brightest highlights.
 
-Three uses:
+Four uses:
 
-    measure     prints the median of an image (L*, zone and reflectance) and the mean
+    measure     prints the median of an image (L*, zone and reflectance) and the mean;
+                with --mask, the weighted median inside a mask
     points      prints the points of the curve, from 0 to 100, for the Luma curve of
                 Capture One, with the pivot at the given value
     apply       applies the curve to an image and saves the result. The curve acts
@@ -25,12 +26,19 @@ Three uses:
                 default) or on each channel (rgb method, which saturates like a
                 film). Colours pushed out of gamut are moved towards the grey of
                 the same luminance, so the median is kept exactly.
+    mask        works out the mask of a Capture One layer from two exports with the
+                curve of the layer flattened, one to black and one to white: the
+                difference of L* between them, divided by 100, is the weight of the
+                mask at each pixel (0 outside, 1 inside, in between in the
+                feathering). It is saved as a 16 bit grey TIFF.
 
 Usage:
     python3 contraste_mediana.py measure photo.tif
     python3 contraste_mediana.py points --pivot 46.5 --contrast 1.3
     python3 contraste_mediana.py apply photo.tif output.tif --contrast 1.3
     python3 contraste_mediana.py apply photo.tif output.tif --contrast 1.3 --region 0,0.4,1,1
+    python3 contraste_mediana.py mask black.tif white.tif mask.tif
+    python3 contraste_mediana.py measure photo.tif --mask mask.tif
 
 --region restricts the computation of the median to a rectangle (fractions
 x0,y0,x1,y1), for example to leave out a white sky or a black frame; the curve
@@ -38,9 +46,9 @@ is applied to the whole image.
 
 Messages and help are shown in English or Spanish (--lang, or the LANG
 environment variable). The commands and options also have their Spanish names
-(medir, puntos, aplicar; --contraste, --pivote, --metodo luminancia, --zona,
---espacio). The line MEDIANA_LSTAR=... printed by measure is the same in both
-languages, for scripts.
+(medir, puntos, aplicar, mascara; --contraste, --pivote, --metodo luminancia,
+--zona, --mascara, --espacio). The lines MEDIANA_LSTAR=... and
+MASCARA_SUPERFICIE=... are the same in both languages, for scripts.
 
 Needs numpy, Pillow and tifffile, and espacio_color.py in the same folder.
 """
@@ -80,6 +88,17 @@ _T = {
         'media2': 'mean of L*: %.2f before, %.2f after',
         'std': 'standard deviation of L*: %.2f before, %.2f after',
         'metodos': {'luminancia': 'luminance', 'rgb': 'rgb'},
+        'mascara_vacia': 'The mask is empty: no pixel has any weight.',
+        'mascara_tamano': 'The mask (%dx%d) does not have the size of the image (%dx%d).',
+        'distinto_tamano': 'The two exports do not have the same size.',
+        'mascara_info': 'mask: %.1f %% of the image with weight above 0.5, total weight equivalent to %.1f %%',
+        'mediana_mascara': 'median inside the mask %s',
+        'media_mascara': 'mean inside the mask   L* %.2f',
+        'h_mascara': 'work out the mask of a layer',
+        'h_mascara_opt': 'grey TIFF with the weight of each pixel',
+        'h_negra': 'export with the Luma curve of the layer flattened at 0',
+        'h_blanca': 'export with the Luma curve of the layer flattened at 100',
+        'h_salida_mascara': 'output mask, 16 bit grey TIFF',
     },
     'es': {
         'describir': 'L* %.2f (zona %s, %.2f), reflectancia %.1f %%',
@@ -106,9 +125,20 @@ _T = {
         'media2': 'media de L*: %.2f antes, %.2f después',
         'std': 'desviación típica de L*: %.2f antes, %.2f después',
         'metodos': {},
+        'mascara_vacia': 'La máscara está vacía: no hay ningún píxel con peso.',
+        'mascara_tamano': 'La máscara (%dx%d) no tiene el tamaño de la imagen (%dx%d).',
+        'distinto_tamano': 'Las dos exportaciones no tienen el mismo tamaño.',
+        'mascara_info': 'máscara: %.1f %% de la imagen con peso mayor que 0,5, peso total equivalente al %.1f %%',
+        'mediana_mascara': 'mediana dentro de la máscara %s',
+        'media_mascara': 'media dentro de la máscara   L* %.2f',
+        'h_mascara': 'deduce la máscara de una capa',
+        'h_mascara_opt': 'TIFF en gris con el peso de cada píxel',
+        'h_negra': 'exportación con la curva Luma de la capa aplanada en 0',
+        'h_blanca': 'exportación con la curva Luma de la capa aplanada en 100',
+        'h_salida_mascara': 'máscara de salida, TIFF en gris de 16 bits',
     },
 }[IDIOMA]
-ORDENES = {'measure': 'medir', 'points': 'puntos', 'apply': 'aplicar'}
+ORDENES = {'measure': 'medir', 'points': 'puntos', 'apply': 'aplicar', 'mask': 'mascara'}
 
 ROMANOS = ['0', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X']
 EPS = 1e-6
@@ -208,6 +238,30 @@ def leer_zona(texto):
         sys.exit(_T['zona_mal'])
 
 
+def mediana_ponderada(v, w):
+    v = np.asarray(v, float).ravel()
+    w = np.asarray(w, float).ravel()
+    ok = w > 0
+    v, w = v[ok], w[ok]
+    if w.sum() <= 0:
+        sys.exit(_T['mascara_vacia'])
+    orden = np.argsort(v)
+    acum = np.cumsum(w[orden])
+    i = int(np.searchsorted(acum, 0.5 * acum[-1]))
+    return float(v[orden][min(i, len(v) - 1)])
+
+
+def leer_mascara(ruta, forma):
+    import tifffile
+    m = tifffile.imread(ruta).astype(float)
+    if m.ndim == 3:
+        m = m[..., 0]
+    m /= 65535.0 if m.max() > 1 else 1.0
+    if m.shape != forma:
+        sys.exit(_T['mascara_tamano'] % (m.shape[1], m.shape[0], forma[1], forma[0]))
+    return m
+
+
 def main():
     en = IDIOMA == 'en'
     comun = argparse.ArgumentParser(add_help=False)
@@ -226,6 +280,15 @@ def main():
 
     pm = sub.add_parser('measure', aliases=['medir'], parents=[comun], help=_T['h_medir'])
     opciones_imagen(pm)
+    pm.add_argument('--mask', '--mascara', dest='mascara', default=None,
+                    metavar='MASK' if en else 'MASCARA', help=_T['h_mascara_opt'])
+
+    pk = sub.add_parser('mask', aliases=['mascara'], parents=[comun], help=_T['h_mascara'])
+    pk.add_argument('negra', metavar='BLACK' if en else 'NEGRA', help=_T['h_negra'])
+    pk.add_argument('blanca', metavar='WHITE' if en else 'BLANCA', help=_T['h_blanca'])
+    pk.add_argument('salida', metavar='OUTPUT' if en else 'SALIDA', help=_T['h_salida_mascara'])
+    pk.add_argument('--space', '--espacio', dest='espacio', choices=['auto'] + list(ec.ESPACIOS),
+                    default='auto', help=_T['h_espacio'])
 
     pp = sub.add_parser('points', aliases=['puntos'], parents=[comun], help=_T['h_puntos'])
     pp.add_argument('--pivot', '--pivote', dest='pivote', type=float, required=True,
@@ -249,8 +312,34 @@ def main():
             print('%.3f,%.3f' % (x, y))
         return
 
+    if a.orden == 'mascara':
+        import tifffile
+        e1, _, icc1 = ec.leer(a.negra)
+        e2, _, _ = ec.leer(a.blanca)
+        if e1.shape != e2.shape:
+            sys.exit(_T['distinto_tamano'])
+        esp = ec.espacio_para(icc1, a.espacio)
+        _, Y1 = luminancia(e1.reshape(-1, 3), esp)
+        _, Y2 = luminancia(e2.reshape(-1, 3), esp)
+        w = np.clip((lstar(Y2) - lstar(Y1)) / 100.0, 0, 1).reshape(e1.shape[:2])
+        w[w < 0.02] = 0.0
+        tifffile.imwrite(a.salida, np.round(w * 65535).astype(np.uint16), photometric='minisblack')
+        print('MASCARA_SUPERFICIE=%.4f' % float((w > 0.5).mean()))
+        print(_T['mascara_info'] % (100 * float((w > 0.5).mean()), 100 * float(w.mean())))
+        return
+
     enc, bits, icc = ec.leer(a.entrada)
     esp = ec.espacio_para(icc, a.espacio)
+    if a.orden == 'medir' and a.mascara:
+        w = leer_mascara(a.mascara, enc.shape[:2])
+        _, Y = luminancia(enc.reshape(-1, 3), esp)
+        L = lstar(Y)
+        med = mediana_ponderada(L, w)
+        media = float((L * w.ravel()).sum() / max(w.sum(), 1e-9))
+        print('MEDIANA_LSTAR=%.4f' % med)
+        print(_T['mediana_mascara'] % describir(med))
+        print(_T['media_mascara'] % media)
+        return
     zona = leer_zona(a.zona)
     _, Y = luminancia(recortar(enc, zona).reshape(-1, 3), esp)
     L = lstar(Y)
