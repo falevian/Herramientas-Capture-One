@@ -66,6 +66,7 @@ _T = {
         'falta_peliculas': 'peliculas.py is missing from the folder of revelado.py',
         'filtro_desconocido': 'unknown filter: %s',
         'solo_bn': 'colour filters only apply to black and white (trix)',
+        'solo_bn_grado': 'the paper grade only applies to black and white (trix)',
         'comprobar': '%s: ΔE*ab of the table against the full integral over %d colours: '
                      'mean %.4f  p99 %.4f  maximum %.4f',
         'tiempo': '  time: table %.2f s, full integral %.2f s (%.0f times faster)',
@@ -76,6 +77,8 @@ _T = {
         'h_ev': 'exposure of the film in stops; negative = denser and more saturated',
         'h_ganancia': 'dye gain; below 1 lowers contrast and chroma',
         'h_copia': 'pro400h and trix: stops by which the print is lightened from the balance',
+        'h_grado': 'trix only: Multigrade paper grade, 0 to 5 (half grades allowed; '
+                   '-0.5 is the 00 filter); default, the grade 2 curve of the model',
         'h_virado': 'trix only: toning of the print (neutral, cold, warm, sepia, selenium)',
         'h_filtro': 'trix only: colour filter in front of the lens, simulated spectrally '
                     '(yellow, deep_yellow, orange, red, deep_red, green, blue)',
@@ -95,6 +98,7 @@ _T = {
         'faltan': 'the input and the output are missing',
         'extra_filtro': '  filter %s (factor %.1f stops, compensated)',
         'extra_virado': '  toning %s',
+        'extra_grado': '  grade %g (ISO R %.0f)',
         'resumen': 'development %s: %s  ev %+g  gain %g  headroom %g  white %s%s  space %s  %dx%d  %.1f s',
         'nombres': {'neutro': 'neutral', 'frio': 'cold', 'calido': 'warm', 'sepia': 'sepia',
                     'selenio': 'selenium', 'difuso': 'diffuse', 'papel': 'paper',
@@ -105,6 +109,7 @@ _T = {
         'falta_peliculas': 'Falta peliculas.py en la carpeta de revelado.py',
         'filtro_desconocido': 'filtro desconocido: %s',
         'solo_bn': 'los filtros de color solo se aplican al blanco y negro (trix)',
+        'solo_bn_grado': 'el grado de papel solo se aplica al blanco y negro (trix)',
         'comprobar': '%s: ΔE*ab tabla frente a integral completa sobre %d colores: '
                      'media %.4f  p99 %.4f  máximo %.4f',
         'tiempo': '  tiempo: tabla %.2f s, integral completa %.2f s (%.0f veces más rápida)',
@@ -115,6 +120,8 @@ _T = {
         'h_ev': 'exposición del film en pasos; negativo = más denso y saturado',
         'h_ganancia': 'ganancia de colorante; menor que 1 rebaja contraste y croma',
         'h_copia': 'pro400h y trix: pasos de aclarado de la copia respecto al balance',
+        'h_grado': 'solo trix: grado del papel Multigrade, de 0 a 5 (admite medios grados; '
+                   '-0.5 es el filtro 00); por defecto, la curva de grado 2 del modelo',
         'h_virado': 'solo trix: virado de la copia (neutro, frio, calido, sepia, selenio)',
         'h_filtro': 'solo trix: filtro de color delante del objetivo, simulado espectralmente '
                     '(amarillo, amarillo_intenso, naranja, rojo, rojo_intenso, verde, azul)',
@@ -134,6 +141,7 @@ _T = {
         'faltan': 'faltan la entrada y la salida',
         'extra_filtro': '  filtro %s (factor %.1f pasos, compensado)',
         'extra_virado': '  virado %s',
+        'extra_grado': '  grado %g (ISO R %.0f)',
         'resumen': 'revelado %s: %s  ev %+g  ganancia %g  margen %g  blanco %s%s  espacio %s  %dx%d  %.1f s',
         'nombres': {},
     },
@@ -218,7 +226,7 @@ class Modelo:
 
     def __init__(self, pelicula, ev=0.0, ganancia=1.0, copia=0.0, virado='neutro',
                  sala='oscura', filtro=None, filtro_csv=None, curvas='suaves',
-                 margen=0.0, blanco='difuso', n_lut=48):
+                 margen=0.0, blanco='difuso', grado=None, n_lut=48):
         P.CURVAS = curvas
         m = P.cargar(pelicula)
         if hasattr(m, 'PRINT_STOPS'):
@@ -238,6 +246,11 @@ class Modelo:
         else:
             self.tipo = 'bn'
         self.g_sala = P.SALAS.get(sala, 1.0) if hasattr(m, 'PROJ') else 1.0
+        self.grado = None
+        if grado is not None:
+            if self.tipo != 'bn':
+                raise ValueError(_T['solo_bn_grado'])
+            self._aplicar_grado(float(grado))
         self.filtro = None
         if filtro or filtro_csv:
             if self.tipo != 'bn':
@@ -268,6 +281,28 @@ class Modelo:
     # ---------------------------------------------------------- utilidades
     def _mcat(self, src, dst):
         return self.m.cat(np.eye(3), src, dst).T
+
+    def _aplicar_grado(self, grado):
+        """Grado de papel Multigrade a partir del rango ISO R de la hoja técnica de
+        Ilford (MG IV RC): R es cien veces el rango de log-exposición útil del papel,
+        así que el grado G se obtiene comprimiendo o estirando el eje de log-exposición
+        de la curva de grado 2 por el factor R(2)/R(G), alrededor del punto en que el
+        papel da densidad 0.74 (el gris medio de la copia). La exposición de la copia se
+        vuelve a equilibrar después para ese gris, como al cambiar de filtro."""
+        m = self.m
+        g = float(np.clip(grado, 0, 5)) if grado >= 0 else -0.5
+        x = np.array([-0.5, 0, 1, 2, 3, 4, 5])           # -0.5 representa el filtro 00
+        R = np.array([180, 160, 130, 110, 90, 60, 40], float)
+        r = float(np.interp(g, x, R))
+        s = 110.0 / r
+        c = float(np.interp(0.74, m.CPAP, m.LEP))
+        LEP, CPAP = m.LEP, m.CPAP
+
+        def pap(loge):
+            return np.interp((loge - c) * s + c, LEP, CPAP, left=CPAP[0], right=CPAP[-1])
+        m._pap_D = pap
+        self.grado = grado
+        self.iso_r = r
 
     def _aplicar_filtro(self, filtro, csv):
         """Reajusta V_PAN (XYZ -> exposición de la Tri-X) para la sensibilidad filtrada,
@@ -481,6 +516,7 @@ def main():
     ap.add_argument('--ev', type=float, default=0.0, help=_T['h_ev'])
     ap.add_argument('--gain', '--ganancia', dest='ganancia', type=float, default=1.0, help=_T['h_ganancia'])
     ap.add_argument('--print', '--copia', dest='copia', type=float, default=0.0, help=_T['h_copia'])
+    ap.add_argument('--grade', '--grado', dest='grado', type=float, default=None, help=_T['h_grado'])
     ap.add_argument('--toning', '--virado', dest='virado', default='neutro', help=_T['h_virado'])
     ap.add_argument('--filter', '--filtro', dest='filtro', default=None, help=_T['h_filtro'])
     ap.add_argument('--filter-csv', '--filtro-csv', dest='filtro_csv', default=None, help=_T['h_filtro_csv'])
@@ -510,7 +546,7 @@ def main():
 
     try:
         modelo = Modelo(a.pelicula, a.ev, a.ganancia, a.copia, a.virado, a.sala,
-                        a.filtro, a.filtro_csv, a.curvas, a.margen, a.blanco)
+                        a.filtro, a.filtro_csv, a.curvas, a.margen, a.blanco, a.grado)
     except ValueError as e:
         sys.exit(str(e))
 
@@ -530,6 +566,8 @@ def main():
     extra = ''
     if modelo.filtro:
         extra = _T['extra_filtro'] % (nom(modelo.filtro), modelo.factor_filtro)
+    if modelo.grado is not None:
+        extra += _T['extra_grado'] % (modelo.grado, modelo.iso_r)
     if modelo.tipo == 'bn' and modelo.m.VIRADO != 'neutro':
         extra += _T['extra_virado'] % nom(modelo.m.VIRADO)
     print(_T['resumen'] % (a.pelicula, modelo.nombre, a.ev, a.ganancia, a.margen, nom(a.blanco), extra,

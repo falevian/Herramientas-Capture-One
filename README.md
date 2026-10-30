@@ -2,16 +2,18 @@
 
 *[Leer en español](README.es.md)*
 
-Six tools for the Scripts menu of Capture One Pro on macOS:
+Eight tools for the Scripts menu of Capture One Pro on macOS:
 
 - **Temporal stack.** Combines a sequence of photos, shot on a tripod or hand-held, with temporal operators computed pixel by pixel in linear light: mean, Hann-weighted mean, median, sigma-clipped mean, maximum and minimum. It gives a synthetic long exposure without a neutral density filter, removes transient things (people, cars, birds) or builds up light trails. If the tripod has moved or the sequence is hand-held, it first aligns the photos (pyramidal ECC registration, euclidean or homography) and crops the borders left without data.
 - **Film grain.** Adds to each selected image a grain physically scaled to the chosen film (Tri-X, Kodachrome 64 and 25, Velvia 50, Pro 400H) and to the crop of the photo: an image cropped to half is treated as an enlarged half frame, and the grain looks proportionally larger. The amplitude is calibrated against the datasheet rms granularity, and the grain depends on tone as it does on slide film or on a print from a negative.
-- **Film development.** Develops the image with the spectral film models of [peliculas.py](https://github.com/falevian/Photographers/tree/main/scripts/peliculas), evaluated pixel by pixel instead of through the 3D table of an ICC profile. The export keeps two stops of headroom above diffuse white, so the shoulder of the film compresses the highlights instead of clipping them. With Tri-X it adds toning and colour filters in front of the lens simulated on the spectral sensitivity, and it can finish with the grain of the same film.
+- **Film development.** Develops the image with the spectral film models of [peliculas.py](https://github.com/falevian/Photographers/tree/main/scripts/peliculas), evaluated pixel by pixel instead of through the 3D table of an ICC profile. The export keeps two stops of headroom above diffuse white, so the shoulder of the film compresses the highlights instead of clipping them. With Tri-X it adds toning, colour filters in front of the lens simulated on the spectral sensitivity, and Multigrade paper grades from 00 to 5 taken from the ISO R range of Ilford's data sheet, and it can finish with the grain of the same film.
 - **Zone map.** Draws the zone system of an image as a false colour map with the area in each zone, and as contour lines over the grey image, to decide dodging and burning. It reads the print as developed, the scene like a light meter, or the tones a modelled Tri-X print at grade 2 would give.
 - **Median contrast.** Raises or lowers the contrast with a logistic curve pivoting on the median of the lightness. Since the median commutes with any increasing curve, the median of the image stays exactly where it was. The curve can be written into Capture One's Luma curve, where it stays editable (the script measures and adjusts the pivot to Capture One's own scale), or applied in Python on L* keeping chromaticity. With an adjustment layer selected, it works out the layer's mask and fixes the median inside the mask only.
 - **Parametric curve.** Lightroom's curve by regions, which Capture One lacks: four sliders for highlights, lights, darks and shadows, with three adjustable splits, each pushing the curve with a smooth bell that blends into its neighbours. Black and white stay fixed and the curve is kept increasing. It is written into the Luma curve of the image or of the selected layer, stays editable, and needs no export.
+- **Test strip.** The darkroom test strip: the same image developed with the film model changing one parameter (paper grade from 00 to 5 with mid grey balanced, print exposure in thirds of a stop, or film exposure), laid out in strips across the photo or as a mosaic. It opens in Preview, rendered with the paper base as white so that the whites change too.
+- **Your way of seeing.** Reads the metadata of the selected images (rating, date and time, focal length, aperture, exposure time, ISO, camera, crop ratio, black and white, profile) and makes an HTML report of what the photos you end up keeping have in common: the selection rate of each value with its Wilson interval, and a list of what stands out after the Benjamini-Hochberg correction for multiple comparisons.
 
-The first five export the selected variants as 16 bit TIFF and process them with a Python program, but they hand back different results. The temporal stack, the film grain and the film development import new TIFF files into the open document. The zone map opens its two images in Preview and changes nothing in the catalog. The median contrast, in its Capture One mode, writes an editable Luma curve into the image or the selected layer and creates no new file: it only exports small temporary copies to measure the median. In its Python mode it imports a new TIFF like the first three. The parametric curve exports nothing: it computes the curve and writes it straight into the Luma curve. The dialogs follow the macOS language, English or Spanish.
+The first five and the test strip export the selected variants as 16 bit TIFF and process them with a Python program, but they hand back different results. The temporal stack, the film grain and the film development import new TIFF files into the open document. The zone map and the test strip open their images in Preview and change nothing in the catalog. The median contrast, in its Capture One mode, writes an editable Luma curve into the image or the selected layer and creates no new file: it only exports small temporary copies to measure the median. In its Python mode it imports a new TIFF like the first three. The parametric curve exports nothing: it computes the curve and writes it straight into the Luma curve. Your way of seeing exports no images either: it reads the metadata and opens a report in the browser. The dialogs follow the macOS language, English or Spanish.
 
 ## Requirements
 
@@ -26,7 +28,7 @@ cd Herramientas-Capture-One
 bash instalar.sh
 ```
 
-The installer copies the Python programs to `~/Pictures/Apilado temporal`, `~/Pictures/Grano` and `~/Pictures/Revelado`, installs the libraries, compiles the six AppleScripts into `~/Library/Scripts/Capture One Scripts` and checks that everything responds. Then, in Capture One, refresh the Scripts menu: “Temporal stack”, “Film grain”, “Film development”, “Zone map”, “Median contrast” and “Parametric curve” should appear. `LANGUAGE=es` or `LANGUAGE=en` in front of the command fixes the language of the dialogs, and `PYTHON=/path/to/python3` selects another Python.
+The installer copies the Python programs to `~/Pictures/Apilado temporal`, `~/Pictures/Grano` and `~/Pictures/Revelado`, installs the libraries, compiles the eight AppleScripts into `~/Library/Scripts/Capture One Scripts` and checks that everything responds. Then, in Capture One, refresh the Scripts menu: “Temporal stack”, “Film grain”, “Film development”, “Zone map”, “Median contrast”, “Parametric curve”, “Test strip” and “Your way of seeing” should appear. `LANGUAGE=es` or `LANGUAGE=en` in front of the command fixes the language of the dialogs, and `PYTHON=/path/to/python3` selects another Python.
 
 The full guide is in [INSTALL.md](INSTALL.md) (plain text in [INSTALL.txt](INSTALL.txt)): step by step installation, how to use each tool, where the files end up, known problems and how to uninstall.
 
@@ -42,6 +44,8 @@ python/
     zonas.py                         zone system map
     contraste_mediana.py             contrast with the median fixed
     curva_parametrica.py             tone curve by regions
+    tira.py                          test strip with the film model
+    estadistica.py                   report on which photos you keep
     espacio_color.py                 reading of images and ICC profiles
     peliculas.py                     spectral models of the films
 applescript/
@@ -51,6 +55,8 @@ applescript/
   zonas_capture_one.applescript      “Zone map”
   mediana_capture_one.applescript    “Median contrast”
   curva_parametrica_capture_one.applescript   “Parametric curve”
+  tira_capture_one.applescript       “Test strip”
+  estadistica_capture_one.applescript         “Your way of seeing”
 INSTALL.md, INSTALL.txt              full guide
 INSTALACION.md, INSTALACION.txt      full guide in Spanish
 ```
@@ -67,6 +73,8 @@ python3 revelado.py linear.tif output.tif --film trix --toning selenium --filter
 python3 zonas.py photo.tif --mode scene --headroom 3
 python3 contraste_mediana.py apply photo.tif output.tif --contrast 1.3
 python3 curva_parametrica.py graph curve.png --highlights -40 --shadows 40
+python3 tira.py linear.tif strip.jpg --film trix --type grade --headroom 2
+python3 estadistica.py metadata.tsv report.html --threshold 4
 ```
 
 With `-h` any of them shows all its options. Messages follow the `LANG` variable or `--lang en|es`, and every option also accepts its Spanish name.

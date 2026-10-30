@@ -1,6 +1,6 @@
 # Photography tools for Capture One
 
-This package adds six tools to the Scripts menu of Capture One on macOS.
+This package adds eight tools to the Scripts menu of Capture One on macOS.
 
 “Temporal stack” combines a sequence with a temporal operator (mean, median, maximum and others) to obtain a synthetic long exposure or to remove transient things, with optional alignment for hand-held sequences.
 
@@ -14,7 +14,11 @@ This package adds six tools to the Scripts menu of Capture One on macOS.
 
 “Parametric curve” writes into the Luma curve a curve by regions, like Lightroom's: highlights, lights, darks and shadows, with adjustable splits.
 
-The first five export the selected variants as 16 bit TIFF and process them with a Python program, but they hand back different results. The temporal stack, the film grain and the film development import new TIFF files into the open document. The zone map opens its two images in Preview and changes nothing in the catalog. The median contrast, in its Capture One mode, writes an editable Luma curve into the image or the selected layer and creates no new file: it only exports small temporary copies to measure the median. In its Python mode it imports a new TIFF like the first three. The parametric curve exports nothing: it computes the curve in Python and writes it straight into the Luma curve.
+“Test strip” develops the same image with several paper grades, print exposures or film exposures, in strips or as a mosaic, like the test strip made under the enlarger.
+
+“Your way of seeing” crosses the metadata of your photos with their rating and makes a report of what the ones you end up keeping have in common.
+
+The first five and the test strip export the selected variants as 16 bit TIFF and process them with a Python program, but they hand back different results. The temporal stack, the film grain and the film development import new TIFF files into the open document. The zone map and the test strip open their images in Preview and change nothing in the catalog. The median contrast, in its Capture One mode, writes an editable Luma curve into the image or the selected layer and creates no new file: it only exports small temporary copies to measure the median. In its Python mode it imports a new TIFF like the first three. The parametric curve exports nothing: it computes the curve in Python and writes it straight into the Luma curve. Your way of seeing does not export images either: it reads the metadata of the selected ones and opens a report in the browser.
 
 The dialogs appear in English or Spanish. By default they follow the language of macOS; the installer can fix one or the other.
 
@@ -35,6 +39,8 @@ Herramientas-Capture-One/
       zonas.py                      zone system map
       contraste_mediana.py          contrast with the median fixed
       curva_parametrica.py          tone curve by regions
+      tira.py                       test strip with the film model
+      estadistica.py                report on your way of seeing
       espacio_color.py              reading of images and ICC profiles
       peliculas.py                  spectral models of the films
   applescript/
@@ -44,6 +50,8 @@ Herramientas-Capture-One/
     zonas_capture_one.applescript
     mediana_capture_one.applescript
     curva_parametrica_capture_one.applescript
+    tira_capture_one.applescript
+    estadistica_capture_one.applescript
 ```
 
 ## What you need before installing
@@ -67,7 +75,7 @@ cd Herramientas-Capture-One
 bash instalar.sh
 ```
 
-The installer creates the folders, copies the Python programs, installs the libraries, compiles the six scripts into the Capture One scripts folder and checks that everything responds. If there was already a different version of grano.py, revelado.py, zonas.py, contraste_mediana.py, curva_parametrica.py, espacio_color.py or peliculas.py in its folder, it keeps it with the suffix `_anterior` before replacing it.
+The installer creates the folders, copies the Python programs, installs the libraries, compiles the eight scripts into the Capture One scripts folder and checks that everything responds. If there was already a different version of grano.py, revelado.py, zonas.py, contraste_mediana.py, curva_parametrica.py, tira.py, estadistica.py, espacio_color.py or peliculas.py in its folder, it keeps it with the suffix `_anterior` before replacing it.
 
 Two optional variables change the installation:
 
@@ -79,7 +87,7 @@ PYTHON=~/miniforge3/envs/Photo/bin/python3 bash instalar.sh  use another Python,
 
 The installer writes the chosen language and Python into the compiled scripts, so nothing has to be edited by hand. If there was a copy of the scripts under their names in the other language, it removes it so that they do not appear twice in the menu.
 
-When it finishes, open Capture One and refresh the Scripts menu. “Temporal stack”, “Film grain”, “Film development”, “Zone map”, “Median contrast” and “Parametric curve” should appear (“Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas”, “Contraste en la mediana” and “Curva paramétrica” when the dialogs are in Spanish).
+When it finishes, open Capture One and refresh the Scripts menu. “Temporal stack”, “Film grain”, “Film development”, “Zone map”, “Median contrast”, “Parametric curve”, “Test strip” and “Your way of seeing” should appear (“Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas”, “Contraste en la mediana”, “Curva paramétrica”, “Tira de pruebas” and “Tu forma de mirar” when the dialogs are in Spanish).
 
 ## Step by step installation
 
@@ -102,6 +110,8 @@ osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Film development.scpt" ap
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Zone map.scpt" applescript/zonas_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Median contrast.scpt" applescript/mediana_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Parametric curve.scpt" applescript/curva_parametrica_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Test strip.scpt" applescript/tira_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Your way of seeing.scpt" applescript/estadistica_capture_one.applescript
 ```
 
 `cp` and `osacompile` print nothing when everything goes well. Scripts compiled this way follow the language of macOS and use the default Python; to fix them, edit the `idiomaFijo` and `pythonFijo` lines at the top of each AppleScript before compiling (for example `property idiomaFijo : "en"`).
@@ -117,7 +127,7 @@ ls -l ~/Library/Scripts/"Capture One Scripts"
 ~/miniforge3/bin/python3 ~/Pictures/Revelado/revelado.py --check --film k64
 ```
 
-The first command must show the Python programs, the second the six `.scpt` files with today's date, the third the libraries message and the fourth the error of the spectral table of the development, which must stay below 0.1 ΔE.
+The first command must show the Python programs, the second the eight `.scpt` files with today's date, the third the libraries message and the fourth the error of the spectral table of the development, which must stay below 0.1 ΔE.
 
 ## How to use the temporal stack
 
@@ -146,15 +156,23 @@ The model works by FFT at full resolution. With 60 megapixel files each image ne
 
 The development uses the same models as the ICC profiles of peliculas.py, but evaluates them directly at each pixel. In Capture One the image must have the normal camera profile, without a film profile; if the script detects a Kodachrome, Velvia, Tri-X or PRO 400H profile it stops, because the film would be applied twice. There is no need to touch the curve: the script sets Linear Response while exporting and then puts it back as it was.
 
-Select the images, open the Scripts menu and choose “Film development”. The script asks for the film. With Tri-X it also asks for the toning (neutral, cold, warm, sepia or selenium) and for the colour filter in front of the lens; with the slides, where the result will be viewed, because a slide was meant to be projected in the dark and on a monitor the contrast should be lowered. Then it asks for the exposure of the film in stops (0 is normal; negative values give a denser, more saturated image) and whether to add the grain of the same film.
+Select the images, open the Scripts menu and choose “Film development”. The script asks for the film. With Tri-X it also asks for the toning (neutral, cold, warm, sepia or selenium), for the colour filter in front of the lens and for the grade of the Multigrade paper; with the slides, where the result will be viewed, because a slide was meant to be projected in the dark and on a monitor the contrast should be lowered. Then it asks for the exposure of the film in stops (0 is normal; negative values give a denser, more saturated image) and whether to add the grain of the same film.
 
 While exporting, the script lowers the exposure two stops and gives them back in Python before the model. This way the model receives what lies up to two stops above diffuse white, which is where the shoulder of the film lives, and the highlights are compressed smoothly instead of being clipped. An ICC profile cannot do this, because its input is clipped at white.
 
 The colour filters multiply the spectral sensitivity of Tri-X by the transmittance of the filter and fit the exposure again, compensating the filter factor on a neutral grey, as when opening the aperture by what the factor says. The transmittances approximate those of Wratten 8, 15, 21, 25, 29, 11 and 47; the resulting factors for yellow (about 1 stop), red (2.8) and deep red (3.9) match the usual ones. From Terminal a measured transmittance can be used with `--filter-csv`.
 
+The paper grades come from the ISO R range in the data sheet of Ilford Multigrade IV RC: 180 for the 00 filter, 160 for 0, 130 for 1, 110 for 2, 90 for 3, 60 for 4 and 40 for 5, interpolated for the half grades. R is a hundred times the useful log-exposure range of the paper, so each grade is obtained by stretching or compressing the exposure axis of the model's grade 2 curve by the factor 110/R around mid grey, and the print exposure is balanced again, as when changing filter.
+
 Each image is imported with the film name added, and with `_grain` if grain was requested. The grain is applied after the development, with the same film and the size computed from the crop.
 
 The ICC profile is still useful for editing, because it shows in real time. The suggested way of working is to edit with the film's ICC profile to see where the image is going, go back to the normal camera profile and do the final development with the script.
+
+## How to use the test strip
+
+It is the strip exposed under the enlarger by covering the sheet step by step. Select an image with the normal camera profile, open the Scripts menu and choose “Test strip”. The script asks for the film and for what changes from one strip to the next: the paper grade (from 00 to 5, Tri-X only, with mid grey balanced in all of them), the print exposure (from -1 to +1 stop in thirds, Tri-X and PRO 400H only; more exposure gives a darker print, as under the enlarger) or the film exposure (from -2 to +2 stops). With Tri-X it also asks for the toning and, if the strip is not of grades, for the fixed paper grade. Finally, whether to lay it out in strips across the image or as a mosaic, one full image per variant.
+
+Like the development, it temporarily sets Linear Response and lowers the exposure two stops to export, and then puts the variant back as it was. The strip is rendered with the paper base as white, like a real print, so that the changes also show in the whites, and it opens in Preview. With what you pick in the strip, the final development is done with “Film development”, which asks for the same grade.
 
 ## How to use the zone map
 
@@ -192,6 +210,12 @@ Select the images, open the Scripts menu and choose “Parametric curve”. Ther
 
 The splits are on the scale of Capture One's curve. If you want the central split to fall on the median of the photo, the median contrast script tells you where the median lies on that scale.
 
+## How to use your way of seeing
+
+Select the images you want to analyse, for example the whole catalog or a large collection with Cmd+A, open the Scripts menu and choose “Your way of seeing”. The script asks how many stars a photo needs to count as chosen (4 by default), reads the metadata of each image (rating, colour tag, date and time, focal length, aperture, exposure time, ISO, camera, crop, black and white and colour profile) and opens a report in the browser. With thousands of images the reading takes a few minutes. With fewer than 30 images selected it does not start, because the statistics would say little.
+
+For each value of each variable, the report computes the fraction of the photos with that value that ended up chosen, with its Wilson confidence interval, and compares it with that of the whole set. Since many values are compared at once, some would come out different by pure chance; the list of what stands out applies the Benjamini-Hochberg correction, which keeps the expected proportion of false discoveries below 5 %. Below there is a chart per variable with the number of photos and the selection rate of each value. An association does not prove a cause: focal length and hour, for example, tend to go hand in hand with the kind of outing.
+
 ## Where the files end up
 
 Each run creates its own folder with the date and time:
@@ -225,9 +249,18 @@ Each run creates its own folder with the date and time:
     input_*/                     full exports (Python mode)
     result/                      TIFF files with the contrast applied (Python mode)
     log.txt                      report for each image
+
+~/Pictures/Revelado/strip_YYYYMMDD_HHMMSS/
+    input/                       TIFF exported in linear light
+    strip_*.jpg                  the test strip
+    log.txt
+
+~/Pictures/Revelado/statistics_YYYYMMDD_HHMMSS/
+    metadata.tsv                 metadata table, one row per image
+    report.html                  the report
 ```
 
-With the dialogs in Spanish the names are `apilado_…`, `grano_…`, `revelado_…`, `zonas_…`, `mediana_…`, `entrada`, `trabajo`, `medida`, `mascara`, `resultado` and `registro.txt`. The input and work folders can be deleted once you have checked the result.
+With the dialogs in Spanish the names are `apilado_…`, `grano_…`, `revelado_…`, `zonas_…`, `mediana_…`, `tira_…`, `estadistica_…`, `entrada`, `trabajo`, `medida`, `mascara`, `resultado`, `metadatos.tsv`, `informe.html` and `registro.txt`. The columns of `metadata.tsv` have the same (Spanish) names in both languages. The input and work folders can be deleted once you have checked the result.
 
 ## Use from Terminal, without Capture One
 
@@ -283,6 +316,15 @@ In contraste_mediana.py, `--method rgb` applies the curve channel by channel, wh
 
 curva_parametrica.py prints the points of the curve or draws a graph with the regions. In Spanish the commands are `puntos` and `grafico`, and the options `--luces`, `--claros`, `--oscuros`, `--sombras` and `--divisiones`.
 
+```
+~/miniforge3/bin/python3 tira.py scene.tif strip.jpg --film trix --type grade --headroom 2
+~/miniforge3/bin/python3 tira.py scene.tif strip.jpg --film trix --type print --grade 3 --layout mosaic
+~/miniforge3/bin/python3 revelado.py scene.tif final.tif --film trix --grade 3 --print -0.33 --headroom 2
+~/miniforge3/bin/python3 estadistica.py metadata.tsv report.html --threshold 5
+```
+
+In revelado.py and tira.py, `--grade` accepts half grades and -0.5 for the 00 filter. In tira.py the types are `print`, `grade` and `exposure`, and the layout `strips` or `mosaic`. In estadistica.py, `--minimum` sets how many photos a value needs to be taken into account (by default, 2 % of the total and at least 12). In Spanish the options are `--grado`, `--tipo copia|grado|exposicion`, `--disposicion tiras|mosaico`, `--umbral`, `--minimo` and `--origen`.
+
 ## Known problems and how to solve them
 
 The first time each script runs, macOS asks for permission for it to control Capture One. Accept it. If it was refused by mistake, it can be enabled in System Settings, Privacy & Security, Automation.
@@ -312,7 +354,9 @@ rm ~/Library/Scripts/"Capture One Scripts"/"Film development.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Zone map.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Median contrast.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Parametric curve.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Test strip.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Your way of seeing.scpt"
 rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ```
 
-With the dialogs in Spanish, the scripts are called “Apilado temporal.scpt”, “Grano de película.scpt”, “Revelado de película.scpt”, “Mapa de zonas.scpt”, “Contraste en la mediana.scpt” and “Curva paramétrica.scpt”. The last command also deletes the results saved in those folders, so check them first. The recipes “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16”, “Zones TIFF 16” and “Median TIFF 16” (or their Spanish equivalents) can be deleted in Capture One's recipe tool.
+With the dialogs in Spanish, the scripts are called “Apilado temporal.scpt”, “Grano de película.scpt”, “Revelado de película.scpt”, “Mapa de zonas.scpt”, “Contraste en la mediana.scpt”, “Curva paramétrica.scpt”, “Tira de pruebas.scpt” and “Tu forma de mirar.scpt”. The last command also deletes the results saved in those folders, so check them first. The recipes “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16”, “Zones TIFF 16” and “Median TIFF 16” (or their Spanish equivalents) can be deleted in Capture One's recipe tool.

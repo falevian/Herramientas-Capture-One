@@ -19,6 +19,7 @@
 property clavesPeliculas : {"k64", "k25", "velvia50", "pro400h", "trix"}
 property clavesFiltros : {"", "yellow", "deep_yellow", "orange", "red", "deep_red", "green", "blue"}
 property clavesSalas : {"dim", "average", "dark"}
+property valoresGrados : {"", "-0.5", "0", "1", "1.5", "2.5", "3", "3.5", "4", "5"}
 property curvasLineales : {"Linear Response", "Respuesta lineal"}
 property marcasPelicula : {"Kodachrome", "Velvia", "Tri-X", "TriX", "PRO 400H", "Pro400H"}
 property margenPasos : 2
@@ -49,6 +50,7 @@ on run
 		set nombresPeliculas to {"Kodachrome 64", "Kodachrome 25", "Velvia 50", "PRO 400H sobre Endura", "Tri-X 400 sobre Multigrade"}
 		set virados to {"neutro", "frio", "calido", "sepia", "selenio"}
 		set nombresFiltros to {"Sin filtro", "Amarillo (Wratten 8)", "Amarillo intenso (Wratten 15)", "Naranja (Wratten 21)", "Rojo (Wratten 25)", "Rojo intenso (Wratten 29)", "Verde (Wratten 11)", "Azul (Wratten 47)"}
+		set nombresGrados to {"Grado 2 (el del modelo)", "00", "0", "1", "1½", "2½", "3", "3½", "4", "5"}
 		set nombresSalas to {"Monitor en penumbra", "Habitación iluminada", "Proyección en sala oscura"}
 	else
 		set idioma to "en"
@@ -56,6 +58,7 @@ on run
 		set nombresPeliculas to {"Kodachrome 64", "Kodachrome 25", "Velvia 50", "PRO 400H on Endura", "Tri-X 400 on Multigrade"}
 		set virados to {"neutral", "cold", "warm", "sepia", "selenium"}
 		set nombresFiltros to {"No filter", "Yellow (Wratten 8)", "Deep yellow (Wratten 15)", "Orange (Wratten 21)", "Red (Wratten 25)", "Deep red (Wratten 29)", "Green (Wratten 11)", "Blue (Wratten 47)"}
+		set nombresGrados to {"Grade 2 (the model's)", "00", "0", "1", "1½", "2½", "3", "3½", "4", "5"}
 		set nombresSalas to {"Monitor in a dim room", "Lit room", "Projection in a dark room"}
 	end if
 
@@ -111,6 +114,13 @@ on run
 		if (item 1 of vir) is not (item 1 of virados) then set descripcion to descripcion & my t(", toning ", ", virado ") & (item 1 of vir)
 		set fe to choose from list nombresFiltros with title titulo with prompt my t("Filter in front of the lens (simulated spectrally on the sensitivity of Tri-X):", "Filtro delante del objetivo (simulado espectralmente sobre la sensibilidad de la Tri-X):") default items {item 1 of nombresFiltros}
 		if fe is false then return
+		set ge to choose from list nombresGrados with title titulo with prompt my t("Multigrade paper grade (from the ISO R range in Ilford's data sheet):", "Grado del papel Multigrade (del rango ISO R de la hoja técnica de Ilford):") default items {item 1 of nombresGrados}
+		if ge is false then return
+		set valorGrado to item (my indice(item 1 of ge, nombresGrados)) of valoresGrados
+		if valorGrado is not "" then
+			set opciones to opciones & " --grade " & valorGrado
+			set descripcion to descripcion & my t(", grade ", ", grado ") & (item 1 of ge)
+		end if
 		set claveFiltro to item (my indice(item 1 of fe, nombresFiltros)) of clavesFiltros
 		if claveFiltro is not "" then
 			set opciones to opciones & " --filter " & claveFiltro
