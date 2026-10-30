@@ -2,15 +2,16 @@
 
 *[Read in English](README.md)*
 
-Cinco herramientas para el menú Scripts de Capture One Pro en macOS:
+Seis herramientas para el menú Scripts de Capture One Pro en macOS:
 
 - **Apilado temporal.** Combina una secuencia de fotos, hecha con trípode o a pulso, mediante operadores temporales píxel a píxel calculados en luz lineal: media, media con ventana de Hann, mediana, media con rechazo sigma, máximo y mínimo. Sirve para conseguir una exposición larga sintética sin filtro de densidad neutra, para borrar lo transitorio (personas, coches, pájaros) o para acumular estelas. Si el trípode se ha movido o la secuencia es a pulso, alinea antes las fotos (registro ECC en pirámide, euclídeo o por homografía) y recorta los bordes que quedan sin datos.
 - **Grano de película.** Añade a cada imagen seleccionada un grano físicamente escalado según la película elegida (Tri-X, Kodachrome 64 y 25, Velvia 50, Pro 400H) y según el recorte de la foto: una imagen recortada a la mitad se trata como medio fotograma ampliado y el grano se ve proporcionalmente mayor. La amplitud está calibrada con la granularidad rms de la hoja técnica, y el grano depende del tono como en una diapositiva o en una copia de un negativo.
 - **Revelado de película.** Revela la imagen con los modelos espectrales de [peliculas.py](https://github.com/falevian/Photographers/tree/main/scripts/peliculas), evaluados píxel a píxel en lugar de pasar por la tabla 3D de un perfil ICC. La exportación deja dos pasos de margen por encima del blanco difuso, de modo que el hombro de la película comprime las luces en lugar de recortarlas. Con Tri-X añade virados y filtros de color delante del objetivo simulados sobre la sensibilidad espectral, y puede terminar con el grano de la misma película.
 - **Mapa de zonas.** Dibuja el sistema de zonas de una imagen en falso color, con la superficie de cada zona, y como curvas de nivel sobre la imagen en gris, para decidir reservados y quemados. Lee la copia tal como está revelada, la escena como un fotómetro, o los tonos que daría una copia modelada de Tri-X a grado 2.
 - **Contraste en la mediana.** Sube o baja el contraste con una curva logística con el pivote en la mediana de la luminosidad. Como la mediana conmuta con cualquier curva creciente, la mediana de la imagen se queda exactamente donde estaba. La curva puede escribirse en la curva Luma de Capture One, donde queda editable (el script mide y ajusta el pivote a la escala propia de Capture One), o aplicarse en Python sobre L* conservando la cromaticidad. Con una capa de ajustes seleccionada, deduce la máscara de la capa y fija la mediana solo dentro de ella.
+- **Curva paramétrica.** La curva por regiones de Lightroom, que Capture One no tiene: cuatro deslizadores para luces, claros, oscuros y sombras, con tres divisiones ajustables, cada uno empujando la curva con una campana suave que se funde con sus vecinas. El negro y el blanco quedan fijos y la curva se mantiene creciente. Se escribe en la curva Luma de la imagen o de la capa seleccionada, queda editable y no necesita exportar.
 
-Todas exportan las variantes seleccionadas como TIFF de 16 bits y las procesan con un programa en Python, pero no todas devuelven lo mismo. El apilado temporal, el grano y el revelado de película importan TIFF nuevos en el documento abierto. El mapa de zonas abre sus dos imágenes en Vista Previa y no cambia nada en el catálogo. El contraste en la mediana, en su modo de Capture One, escribe una curva Luma editable en la imagen o en la capa seleccionada y no crea ningún archivo nuevo: solo exporta copias pequeñas y temporales para medir la mediana. En su modo Python importa un TIFF nuevo, como las tres primeras. Los diálogos siguen el idioma de macOS, español o inglés.
+Las cinco primeras exportan las variantes seleccionadas como TIFF de 16 bits y las procesan con un programa en Python, pero no todas devuelven lo mismo. El apilado temporal, el grano y el revelado de película importan TIFF nuevos en el documento abierto. El mapa de zonas abre sus dos imágenes en Vista Previa y no cambia nada en el catálogo. El contraste en la mediana, en su modo de Capture One, escribe una curva Luma editable en la imagen o en la capa seleccionada y no crea ningún archivo nuevo: solo exporta copias pequeñas y temporales para medir la mediana. En su modo Python importa un TIFF nuevo, como las tres primeras. La curva paramétrica no exporta nada: calcula la curva y la escribe directamente en la curva Luma. Los diálogos siguen el idioma de macOS, español o inglés.
 
 ## Requisitos
 
@@ -25,7 +26,7 @@ cd Herramientas-Capture-One
 LANGUAGE=es bash instalar.sh
 ```
 
-El instalador copia los programas en Python a `~/Pictures/Apilado temporal`, `~/Pictures/Grano` y `~/Pictures/Revelado`, instala las librerías, compila los cinco AppleScript en `~/Library/Scripts/Capture One Scripts` y comprueba que todo responde. Después, en Capture One, actualiza el menú Scripts: deben aparecer “Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas” y “Contraste en la mediana”. `LANGUAGE=es` fija los diálogos en español aunque macOS esté en inglés; sin esa variable siguen el idioma del sistema. `PYTHON=/ruta/a/python3` elige otro Python.
+El instalador copia los programas en Python a `~/Pictures/Apilado temporal`, `~/Pictures/Grano` y `~/Pictures/Revelado`, instala las librerías, compila los seis AppleScript en `~/Library/Scripts/Capture One Scripts` y comprueba que todo responde. Después, en Capture One, actualiza el menú Scripts: deben aparecer “Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas”, “Contraste en la mediana” y “Curva paramétrica”. `LANGUAGE=es` fija los diálogos en español aunque macOS esté en inglés; sin esa variable siguen el idioma del sistema. `PYTHON=/ruta/a/python3` elige otro Python.
 
 La guía completa está en [INSTALACION.md](INSTALACION.md) (y en texto plano en [INSTALACION.txt](INSTALACION.txt)): instalación paso a paso, uso de cada herramienta, dónde quedan los archivos, problemas conocidos y desinstalación.
 
@@ -40,6 +41,7 @@ python/
     revelado.py                      revelado de película píxel a píxel
     zonas.py                         mapa del sistema de zonas
     contraste_mediana.py             contraste con la mediana fija
+    curva_parametrica.py             curva de tonos por regiones
     espacio_color.py                 lectura de imágenes y perfiles ICC
     peliculas.py                     modelos espectrales de las películas
 applescript/
@@ -48,6 +50,7 @@ applescript/
   revelado_capture_one.applescript   “Revelado de película”
   zonas_capture_one.applescript      “Mapa de zonas”
   mediana_capture_one.applescript    “Contraste en la mediana”
+  curva_parametrica_capture_one.applescript   “Curva paramétrica”
 INSTALACION.md, INSTALACION.txt      guía completa
 INSTALL.md, INSTALL.txt              guía completa en inglés
 ```
@@ -63,6 +66,7 @@ python3 grano.py entrada.tif salida.tif --pelicula trix --espacio auto
 python3 revelado.py lineal.tif salida.tif --pelicula trix --virado selenio --filtro rojo --margen 2
 python3 zonas.py foto.tif --modo escena --margen 3
 python3 contraste_mediana.py aplicar foto.tif salida.tif --contraste 1.3
+python3 curva_parametrica.py grafico curva.png --luces -40 --sombras 40
 ```
 
 Con `-h` cualquiera de ellos muestra todas sus opciones. Los mensajes siguen la variable `LANG` o `--lang es|en`, y todas las opciones tienen también su nombre en inglés.

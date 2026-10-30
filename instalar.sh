@@ -1,8 +1,9 @@
 #!/bin/bash
 # Installer for the Capture One tools: temporal stack, film grain, film development,
-# zone map and median contrast.
+# zone map, median contrast and parametric curve.
 # Instalador de las herramientas para Capture One: apilado temporal, grano de
-# película, revelado de película, mapa de zonas y contraste en la mediana.
+# película, revelado de película, mapa de zonas, contraste en la mediana y curva
+# paramétrica.
 #
 # Usage / Uso:
 #   bash instalar.sh
@@ -47,6 +48,7 @@ HERRAMIENTAS=(
     "revelado|Film development|Revelado de película"
     "zonas|Zone map|Mapa de zonas"
     "mediana|Median contrast|Contraste en la mediana"
+    "curva_parametrica|Parametric curve|Curva paramétrica"
 )
 
 conservar () {
@@ -66,7 +68,7 @@ mkdir -p "$APILADO" "$GRANO" "$REVELADO" "$SCRIPTS"
 msg "2. Copying the Python programs" "2. Copiando los programas en Python"
 cp "$DIR/python/apilado_temporal.py" "$APILADO/"
 conservar "$DIR/python/grano.py" "$GRANO"
-for f in revelado.py zonas.py contraste_mediana.py espacio_color.py peliculas.py; do
+for f in revelado.py zonas.py contraste_mediana.py curva_parametrica.py espacio_color.py peliculas.py; do
     conservar "$DIR/python/revelado/$f" "$REVELADO"
 done
 

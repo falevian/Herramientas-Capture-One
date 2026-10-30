@@ -1,6 +1,6 @@
 # Herramientas de fotografía para Capture One
 
-Este paquete añade cinco herramientas al menú Scripts de Capture One en macOS.
+Este paquete añade seis herramientas al menú Scripts de Capture One en macOS.
 
 “Apilado temporal” combina una secuencia mediante un operador temporal (media, mediana, máximo y otros) para conseguir una exposición larga sintética o borrar lo transitorio, con alineado opcional para secuencias a pulso.
 
@@ -12,7 +12,9 @@ Este paquete añade cinco herramientas al menú Scripts de Capture One en macOS.
 
 “Contraste en la mediana” sube o baja el contraste dejando fijo el tono que está en la mediana de la luminosidad, de modo que la imagen ni se aclara ni se oscurece en ese sentido. Puede escribir la curva en Capture One, donde queda editable, o aplicarla en Python.
 
-Todas exportan las variantes seleccionadas como TIFF de 16 bits y las procesan con un programa en Python, pero no todas devuelven lo mismo. El apilado temporal, el grano y el revelado de película importan TIFF nuevos en el documento abierto. El mapa de zonas abre sus dos imágenes en Vista Previa y no cambia nada en el catálogo. El contraste en la mediana, en su modo de Capture One, escribe una curva Luma editable en la imagen o en la capa seleccionada y no crea ningún archivo nuevo: solo exporta copias pequeñas y temporales para medir la mediana. En su modo Python importa un TIFF nuevo, como las tres primeras.
+“Curva paramétrica” escribe en la curva Luma una curva por regiones, como la de Lightroom: luces, claros, oscuros y sombras, con divisiones ajustables.
+
+Las cinco primeras exportan las variantes seleccionadas como TIFF de 16 bits y las procesan con un programa en Python, pero no todas devuelven lo mismo. El apilado temporal, el grano y el revelado de película importan TIFF nuevos en el documento abierto. El mapa de zonas abre sus dos imágenes en Vista Previa y no cambia nada en el catálogo. El contraste en la mediana, en su modo de Capture One, escribe una curva Luma editable en la imagen o en la capa seleccionada y no crea ningún archivo nuevo: solo exporta copias pequeñas y temporales para medir la mediana. En su modo Python importa un TIFF nuevo, como las tres primeras. La curva paramétrica no exporta nada: calcula la curva en Python y la escribe directamente en la curva Luma.
 
 Los diálogos salen en español o en inglés. Por defecto siguen el idioma de macOS; el instalador puede fijar uno u otro.
 
@@ -32,6 +34,7 @@ Herramientas-Capture-One/
       revelado.py                   revelado de película píxel a píxel
       zonas.py                      mapa del sistema de zonas
       contraste_mediana.py          contraste con la mediana fija
+      curva_parametrica.py          curva de tonos por regiones
       espacio_color.py              lectura de imágenes y perfiles ICC
       peliculas.py                  modelos espectrales de las películas
   applescript/
@@ -40,6 +43,7 @@ Herramientas-Capture-One/
     revelado_capture_one.applescript
     zonas_capture_one.applescript
     mediana_capture_one.applescript
+    curva_parametrica_capture_one.applescript
 ```
 
 ## Qué hace falta antes de instalar
@@ -63,7 +67,7 @@ cd Herramientas-Capture-One
 LANGUAGE=es bash instalar.sh
 ```
 
-El instalador crea las carpetas, copia los programas en Python, instala las librerías, compila los cinco scripts en la carpeta de scripts de Capture One y comprueba que todo responde. Si ya había una versión distinta de grano.py, revelado.py, zonas.py, contraste_mediana.py, espacio_color.py o peliculas.py en su carpeta, la conserva con el sufijo `_anterior` antes de sustituirla.
+El instalador crea las carpetas, copia los programas en Python, instala las librerías, compila los seis scripts en la carpeta de scripts de Capture One y comprueba que todo responde. Si ya había una versión distinta de grano.py, revelado.py, zonas.py, contraste_mediana.py, curva_parametrica.py, espacio_color.py o peliculas.py en su carpeta, la conserva con el sufijo `_anterior` antes de sustituirla.
 
 `LANGUAGE=es` fija los diálogos en español aunque macOS esté en inglés; sin esa variable siguen el idioma del sistema, y con `LANGUAGE=en` salen siempre en inglés. Si quieres usar otro Python, por ejemplo el de un entorno de conda, indícalo así:
 
@@ -73,7 +77,7 @@ PYTHON=~/miniforge3/envs/Photo/bin/python3 LANGUAGE=es bash instalar.sh
 
 El instalador escribe el idioma y el Python elegidos en los scripts compilados, así que no hay que editar nada a mano. Si había una copia de los scripts con los nombres del otro idioma, la elimina para que no aparezcan dos veces en el menú.
 
-Cuando termine, abre Capture One y usa la opción de actualizar el menú Scripts. Deberían aparecer “Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas” y “Contraste en la mediana” (“Temporal stack”, “Film grain”, “Film development”, “Zone map” y “Median contrast” si los diálogos están en inglés).
+Cuando termine, abre Capture One y usa la opción de actualizar el menú Scripts. Deberían aparecer “Apilado temporal”, “Grano de película”, “Revelado de película”, “Mapa de zonas”, “Contraste en la mediana” y “Curva paramétrica” (“Temporal stack”, “Film grain”, “Film development”, “Zone map”, “Median contrast” y “Parametric curve” si los diálogos están en inglés).
 
 ## Instalación paso a paso
 
@@ -95,6 +99,7 @@ osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt" 
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Revelado de película.scpt" applescript/revelado_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Mapa de zonas.scpt" applescript/zonas_capture_one.applescript
 osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Contraste en la mediana.scpt" applescript/mediana_capture_one.applescript
+osacompile -o ~/Library/Scripts/"Capture One Scripts"/"Curva paramétrica.scpt" applescript/curva_parametrica_capture_one.applescript
 ```
 
 `cp` y `osacompile` no escriben nada cuando todo va bien; si no aparece ningún mensaje, ha funcionado. Los scripts compilados así siguen el idioma de macOS y usan el Python por defecto; para fijarlos, cambia las líneas `idiomaFijo` y `pythonFijo` del principio de cada AppleScript antes de compilar (por ejemplo `property idiomaFijo : "es"`).
@@ -108,7 +113,7 @@ ls -l ~/Library/Scripts/"Capture One Scripts"
 ~/miniforge3/bin/python3 ~/Pictures/Revelado/revelado.py --comprobar --pelicula k64
 ```
 
-La primera orden debe mostrar los programas en Python, la segunda los cinco archivos `.scpt` con la fecha de hoy, la tercera el mensaje de librerías correctas y la cuarta el error de la tabla espectral del revelado, que debe quedar por debajo de 0,1 ΔE.
+La primera orden debe mostrar los programas en Python, la segunda los seis archivos `.scpt` con la fecha de hoy, la tercera el mensaje de librerías correctas y la cuarta el error de la tabla espectral del revelado, que debe quedar por debajo de 0,1 ΔE.
 
 ## Cómo se usa el apilado temporal
 
@@ -174,6 +179,14 @@ El script trabaja sobre la capa que tengas seleccionada. Si es la capa de imagen
 “TIFF nuevo con Python” exporta la imagen completa, aplica la curva exacta sobre L* conservando la cromaticidad e importa el resultado con `_contraste` en el nombre.
 
 Al terminar aparece un informe con la mediana conservada, el error que queda y, en el modo de Capture One, dónde ha quedado el pivote en la escala de su curva.
+
+## Cómo se usa la curva paramétrica
+
+Es la curva por regiones de Lightroom, que Capture One no tiene. Cuatro deslizadores, de -100 a +100, actúan sobre cuatro regiones del eje tonal: sombras, oscuros, claros y luces, separadas por tres divisiones que por defecto están en 25, 50 y 75. Cada deslizador sube o baja la curva con una campana suave que ocupa su región y se solapa con las vecinas hasta la mitad de su anchura, así que las regiones se funden sin escalones. El negro y el blanco quedan fijos. Si una combinación extrema llegara a invertir tonos en algún tramo, el script reduce todas las amplitudes por igual hasta que la curva vuelve a ser creciente y lo indica.
+
+Selecciona las imágenes, abre el menú Scripts y elige “Curva paramétrica”. Hay preajustes (contraste en S suave y fuerte, recuperar luces y abrir sombras, luces suaves, sombras abiertas) y una opción personalizada que pide los cuatro valores y las tres divisiones separados por punto y coma. La curva se escribe en la curva Luma de la capa seleccionada, o de la imagen si está seleccionada la capa de imagen, sustituyendo la que hubiera, y queda editable. No exporta nada, así que es instantáneo.
+
+Las divisiones están en la escala de la curva de Capture One. Si quieres que la división central caiga en la mediana de la foto, el script de contraste en la mediana te dice dónde queda la mediana en esa escala.
 
 ## Dónde quedan los archivos
 
@@ -259,6 +272,13 @@ En zonas.py, `--lado` fija el lado largo de las imágenes generadas (3000 píxel
 
 En contraste_mediana.py, `--metodo rgb` aplica la curva canal a canal, lo que satura como una película; el pivote se reajusta para que la mediana de la luminosidad tampoco cambie. `--zona` limita el cálculo de la mediana a un rectángulo, por ejemplo para no contar un cielo blanco o un marco negro, aunque la curva se aplica a toda la imagen. `puntos --pivote 46.5 --contraste 1.3` imprime los puntos de la curva para la curva Luma de Capture One. `mascara` deduce la máscara de una capa a partir de las dos exportaciones con su curva aplanada en negro y en blanco, y `medir --mascara` da la mediana ponderada dentro de ella. Las órdenes tienen también nombre en inglés: `measure`, `points`, `apply` y `mask`.
 
+```
+~/miniforge3/bin/python3 curva_parametrica.py puntos --claros 20 --oscuros -20
+~/miniforge3/bin/python3 curva_parametrica.py grafico curva.png --luces -40 --sombras 40 --divisiones 20,45,70
+```
+
+curva_parametrica.py imprime los puntos de la curva o dibuja un gráfico con las regiones. En inglés las órdenes son `points` y `graph`, y las opciones `--highlights`, `--lights`, `--darks`, `--shadows` y `--splits`.
+
 ## Problemas conocidos y cómo resolverlos
 
 La primera vez que se ejecuta cada script, macOS pide permiso para que controle Capture One. Hay que aceptarlo. Si se rechazó por error, se puede activar en Ajustes del Sistema, Privacidad y seguridad, Automatización.
@@ -287,7 +307,8 @@ rm ~/Library/Scripts/"Capture One Scripts"/"Grano de película.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Revelado de película.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Mapa de zonas.scpt"
 rm ~/Library/Scripts/"Capture One Scripts"/"Contraste en la mediana.scpt"
+rm ~/Library/Scripts/"Capture One Scripts"/"Curva paramétrica.scpt"
 rm -r ~/Pictures/"Apilado temporal" ~/Pictures/Grano ~/Pictures/Revelado
 ```
 
-Con los diálogos en inglés, los scripts se llaman “Temporal stack.scpt”, “Film grain.scpt”, “Film development.scpt”, “Zone map.scpt” y “Median contrast.scpt”. La última orden borra también los resultados guardados en esas carpetas, así que conviene revisarlas antes. Las recetas “Apilado temporal TIFF 16”, “Grano TIFF 16”, “Revelado TIFF 16”, “Zonas TIFF 16” y “Mediana TIFF 16” (o sus equivalentes en inglés: “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16”, “Zones TIFF 16” y “Median TIFF 16”) se pueden eliminar desde la herramienta de recetas de Capture One.
+Con los diálogos en inglés, los scripts se llaman “Temporal stack.scpt”, “Film grain.scpt”, “Film development.scpt”, “Zone map.scpt”, “Median contrast.scpt” y “Parametric curve.scpt”. La última orden borra también los resultados guardados en esas carpetas, así que conviene revisarlas antes. Las recetas “Apilado temporal TIFF 16”, “Grano TIFF 16”, “Revelado TIFF 16”, “Zonas TIFF 16” y “Mediana TIFF 16” (o sus equivalentes en inglés: “Temporal stack TIFF 16”, “Film grain TIFF 16”, “Film development TIFF 16”, “Zones TIFF 16” y “Median TIFF 16”) se pueden eliminar desde la herramienta de recetas de Capture One.
